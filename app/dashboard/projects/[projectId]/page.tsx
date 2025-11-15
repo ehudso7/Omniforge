@@ -32,15 +32,5 @@ export default async function ProjectPage({
     notFound();
   }
 
-  // Parse JSON strings back to objects for SQLite
-  const parsedProject = {
-    ...project,
-    assets: project.assets.map((asset: any) => ({
-      ...asset,
-      outputData: JSON.parse(asset.outputData),
-      metadata: asset.metadata ? JSON.parse(asset.metadata) : null,
-    })),
-  };
-
-  return <ProjectWorkspace project={parsedProject} />;
+  return <ProjectWorkspace project={project} />;
 }
