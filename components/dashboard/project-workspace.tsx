@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, FileText, Image, Music, Video } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Sparkles, FileText, Image, Music, Video } from "lucide-react";
+import UnifiedGenerator from "@/components/tools/unified-generator";
 import TextTool from "@/components/tools/text-tool";
 import ImageTool from "@/components/tools/image-tool";
 import AudioTool from "@/components/tools/audio-tool";
@@ -29,38 +31,59 @@ interface ProjectWorkspaceProps {
   project: Project;
 }
 
-type ToolType = "TEXT" | "IMAGE" | "AUDIO" | "VIDEO";
+type ViewType = "UNIFIED" | "TEXT" | "IMAGE" | "AUDIO" | "VIDEO";
 
 export default function ProjectWorkspace({ project }: ProjectWorkspaceProps) {
-  const [activeTab, setActiveTab] = useState<ToolType>("TEXT");
+  const [activeView, setActiveView] = useState<ViewType>("UNIFIED");
+  const [refreshKey, setRefreshKey] = useState(0);
+  const router = useRouter();
 
-  const tabs = [
-    { type: "TEXT" as ToolType, label: "Text", icon: FileText },
-    { type: "IMAGE" as ToolType, label: "Image", icon: Image },
-    { type: "AUDIO" as ToolType, label: "Audio", icon: Music },
-    { type: "VIDEO" as ToolType, label: "Video", icon: Video },
+  const views = [
+    { type: "UNIFIED" as ViewType, label: "Unified Generator", icon: Sparkles, primary: true },
+    { type: "TEXT" as ViewType, label: "Text Only", icon: FileText },
+    { type: "IMAGE" as ViewType, label: "Image Only", icon: Image },
+    { type: "AUDIO" as ViewType, label: "Audio Only", icon: Music },
+    { type: "VIDEO" as ViewType, label: "Video Only", icon: Video },
   ];
 
-  const renderTool = () => {
-    const assets = project.assets.filter((a) => a.type === activeTab);
+  const handleGenerationComplete = () => {
+    // Refresh the page to show new assets
+    setRefreshKey((prev) => prev + 1);
+    router.refresh();
+  };
 
-    switch (activeTab) {
+  const renderView = () => {
+    const assets = project.assets.filter((a) => {
+      if (activeView === "UNIFIED") return true;
+      return a.type === activeView;
+    });
+
+    switch (activeView) {
+      case "UNIFIED":
+        return (
+          <UnifiedGenerator
+            key={refreshKey}
+            projectId={project.id}
+            assets={assets}
+            onGenerationComplete={handleGenerationComplete}
+          />
+        );
       case "TEXT":
-        return <TextTool projectId={project.id} assets={assets} />;
+        return <TextTool projectId={project.id} assets={assets.filter((a) => a.type === "TEXT")} />;
       case "IMAGE":
-        return <ImageTool projectId={project.id} assets={assets} />;
+        return <ImageTool projectId={project.id} assets={assets.filter((a) => a.type === "IMAGE")} />;
       case "AUDIO":
-        return <AudioTool projectId={project.id} assets={assets} />;
+        return <AudioTool projectId={project.id} assets={assets.filter((a) => a.type === "AUDIO")} />;
       case "VIDEO":
-        return <VideoTool projectId={project.id} assets={assets} />;
+        return <VideoTool projectId={project.id} assets={assets.filter((a) => a.type === "VIDEO")} />;
       default:
         return null;
     }
   };
 
   return (
-    <div className="min-h-screen">
-      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4">
           <Link
             href="/dashboard"
@@ -79,21 +102,23 @@ export default function ProjectWorkspace({ project }: ProjectWorkspaceProps) {
         </div>
 
         <div className="container mx-auto px-4">
-          <div className="flex gap-1">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
+          <div className="flex gap-1 overflow-x-auto">
+            {views.map((view) => {
+              const Icon = view.icon;
               return (
                 <button
-                  key={tab.type}
-                  onClick={() => setActiveTab(tab.type)}
-                  className={`flex items-center gap-2 px-6 py-3 font-medium transition-colors ${
-                    activeTab === tab.type
-                      ? "bg-gray-50 dark:bg-gray-900 border-b-2 border-blue-600 text-blue-600"
+                  key={view.type}
+                  onClick={() => setActiveView(view.type)}
+                  className={`flex items-center gap-2 px-6 py-3 font-medium transition-colors whitespace-nowrap ${
+                    activeView === view.type
+                      ? view.primary
+                        ? "bg-blue-50 dark:bg-blue-900/20 border-b-2 border-blue-600 text-blue-600"
+                        : "bg-gray-50 dark:bg-gray-900 border-b-2 border-blue-600 text-blue-600"
                       : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
                   }`}
                 >
                   <Icon className="w-5 h-5" />
-                  {tab.label}
+                  {view.label}
                 </button>
               );
             })}
@@ -101,7 +126,7 @@ export default function ProjectWorkspace({ project }: ProjectWorkspaceProps) {
         </div>
       </div>
 
-      <div className="container mx-auto px-4 py-8">{renderTool()}</div>
+      <div className="container mx-auto px-4 py-8">{renderView()}</div>
     </div>
   );
 }
