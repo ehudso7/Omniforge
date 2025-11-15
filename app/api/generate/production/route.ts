@@ -47,25 +47,30 @@ export async function POST(request: Request) {
 
     if (params.includeText) {
       try {
-        assets.text = await prisma.asset.create({
-          data: {
-            projectId: project.id,
-            type: "TEXT",
-            title: plan.title || `Production Brief - ${new Date().toLocaleString()}`,
-            inputPrompt: params.prompt,
-            outputData: {
-              summary: plan.summary,
-              script: plan.script,
-              callToAction: plan.callToAction,
-              keywords: plan.keywords,
+          assets.text = await prisma.asset.create({
+            data: {
+              projectId: project.id,
+              type: "TEXT",
+              title: plan.title || `Production Brief - ${new Date().toLocaleString()}`,
+              inputPrompt: params.prompt,
+              outputData: {
+                title: plan.title,
+                summary: plan.summary,
+                script: plan.script,
+                audioNarration: plan.audioNarration,
+                visualPrompt: plan.visualPrompt,
+                videoConcept: plan.videoConcept,
+                callToAction: plan.callToAction,
+                keywords: plan.keywords,
+              },
+              metadata: {
+                mode: "production",
+                productionRunId,
+                source: "plan",
+                userPrompt: params.prompt,
+              },
             },
-            metadata: {
-              mode: "production",
-              productionRunId,
-              source: "plan",
-            },
-          },
-        });
+          });
       } catch (error) {
         console.error("Failed to persist text asset:", error);
         errors.text = "Failed to save text asset";
@@ -104,6 +109,8 @@ export async function POST(request: Request) {
                   mode: "production",
                   productionRunId,
                   size,
+                  visualPrompt: plan.visualPrompt,
+                  userPrompt: params.prompt,
                 },
               },
             });
@@ -141,11 +148,13 @@ export async function POST(request: Request) {
                   format: audioResult.format,
                   model: audioResult.model,
                 },
-                metadata: {
-                  mode: "production",
-                  productionRunId,
-                  voice: params.audioVoice ?? "alloy",
-                },
+                  metadata: {
+                    mode: "production",
+                    productionRunId,
+                    voice: params.audioVoice ?? "alloy",
+                    narrationSource: plan.audioNarration,
+                    userPrompt: params.prompt,
+                  },
               },
             });
           } catch (error) {
@@ -174,12 +183,14 @@ export async function POST(request: Request) {
                 title: `${plan.title} - Storyboard`,
                 inputPrompt: plan.videoConcept || plan.summary,
                 outputData: storyboard as unknown as Prisma.JsonObject,
-                metadata: {
-                  mode: "production",
-                  productionRunId,
-                  frames: params.videoFrames ?? 6,
-                  duration: params.videoDuration ?? 60,
-                },
+                  metadata: {
+                    mode: "production",
+                    productionRunId,
+                    frames: params.videoFrames ?? 6,
+                    duration: params.videoDuration ?? 60,
+                    concept: plan.videoConcept || plan.summary,
+                    userPrompt: params.prompt,
+                  },
               },
             });
           } catch (error) {

@@ -15,9 +15,11 @@ import {
   Video,
 } from "lucide-react";
 
+type ProductionAssetType = "TEXT" | "IMAGE" | "AUDIO" | "VIDEO";
+
 interface Asset {
   id: string;
-  type: "TEXT" | "IMAGE" | "AUDIO" | "VIDEO";
+  type: ProductionAssetType;
   title: string;
   inputPrompt: string;
   outputData: any;
@@ -46,6 +48,25 @@ interface ProductionResponse {
   errors?: Record<string, string>;
 }
 
+interface ProductionRunAggregate {
+  runId: string;
+  createdAt: string;
+  assets: Asset[];
+  byType: Partial<Record<ProductionAssetType, Asset>>;
+}
+
+interface ProductionRunDisplay extends ProductionRunAggregate {
+  title: string;
+  summary: string;
+  callToAction?: string;
+  keywords: string[];
+  prompt?: string;
+  textAsset?: Asset;
+  imageAsset?: Asset;
+  audioAsset?: Asset;
+  videoAsset?: Asset;
+}
+
 export default function ProductionTool({
   projectId,
   assets,
@@ -64,12 +85,13 @@ export default function ProductionTool({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ProductionResponse | null>(null);
 
-  const productionRuns = useMemo(() => {
+  const productionRuns = useMemo<ProductionRunAggregate[]>(() => {
     const grouped: Record<
       string,
       {
         assets: Asset[];
         createdAt: string;
+        byType: Partial<Record<ProductionAssetType, Asset>>;
       }
     > = {};
 
@@ -79,9 +101,10 @@ export default function ProductionTool({
       const assetDate = new Date(asset.createdAt);
       const assetTimestamp = assetDate.toISOString();
       if (!grouped[runId]) {
-        grouped[runId] = { assets: [], createdAt: assetTimestamp };
+        grouped[runId] = { assets: [], createdAt: assetTimestamp, byType: {} };
       }
       grouped[runId].assets.push(asset);
+      grouped[runId].byType[asset.type] = asset;
       if (
         assetDate.getTime() >
         new Date(grouped[runId].createdAt).getTime()
@@ -95,12 +118,49 @@ export default function ProductionTool({
         runId,
         assets: data.assets,
         createdAt: data.createdAt,
+        byType: data.byType,
       }))
       .sort(
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
   }, [assets]);
+
+  const formattedRuns = useMemo<ProductionRunDisplay[]>(
+    () => productionRuns.map((run) => buildRunDisplay(run)),
+    [productionRuns]
+  );
+
+  const liveRunAggregate = useMemo<ProductionRunAggregate | null>(() => {
+    if (!result) return null;
+    const aggregate: ProductionRunAggregate = {
+      runId: result.runId,
+      createdAt: new Date().toISOString(),
+      assets: [],
+      byType: {},
+    };
+
+    const pushAsset = (type: ProductionAssetType, asset?: Asset) => {
+      if (!asset) return;
+      aggregate.byType[type] = asset;
+      aggregate.assets.push(asset);
+    };
+
+    pushAsset("TEXT", result.assets.text);
+    pushAsset("IMAGE", result.assets.image);
+    pushAsset("AUDIO", result.assets.audio);
+    pushAsset("VIDEO", result.assets.video);
+
+    return aggregate.assets.length ? aggregate : null;
+  }, [result]);
+
+  const liveRunDisplay = useMemo<ProductionRunDisplay | null>(
+    () =>
+      liveRunAggregate && result
+        ? buildRunDisplay(liveRunAggregate, result.plan)
+        : null,
+    [liveRunAggregate, result]
+  );
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
@@ -141,81 +201,6 @@ export default function ProductionTool({
     }
   };
 
-  const renderHistoryAsset = (asset: Asset) => {
-    switch (asset.type) {
-      case "TEXT":
-        return (
-          <div key={asset.id} className="space-y-2">
-            <div className="flex items-center gap-2 font-semibold">
-              <FileText className="w-4 h-4" />
-              Narrative
-            </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-line line-clamp-4">
-              {asset.outputData?.summary || asset.outputData?.script}
-            </p>
-          </div>
-        );
-      case "IMAGE":
-        return (
-          <div key={asset.id} className="space-y-2">
-            <div className="flex items-center gap-2 font-semibold">
-              <ImageIcon className="w-4 h-4" />
-              Key Art
-            </div>
-            {asset.outputData?.url ? (
-              <div className="relative w-full aspect-square rounded-md overflow-hidden bg-gray-100 dark:bg-gray-900">
-                <Image
-                  src={asset.outputData.url}
-                  alt={asset.title}
-                  fill
-                  className="object-cover"
-                />
-              </div>
-            ) : (
-              <p className="text-sm text-gray-500">No image url available.</p>
-            )}
-          </div>
-        );
-      case "AUDIO":
-        return (
-          <div key={asset.id} className="space-y-2">
-            <div className="flex items-center gap-2 font-semibold">
-              <Music className="w-4 h-4" />
-              Voiceover
-            </div>
-            {asset.outputData?.dataUrl || asset.outputData?.url ? (
-              <audio
-                controls
-                src={asset.outputData.dataUrl || asset.outputData.url}
-                className="w-full"
-              />
-            ) : (
-              <p className="text-sm text-gray-500">No audio stream stored.</p>
-            )}
-          </div>
-        );
-      case "VIDEO":
-        return (
-          <div key={asset.id} className="space-y-2">
-            <div className="flex items-center gap-2 font-semibold">
-              <Video className="w-4 h-4" />
-              Storyboard
-            </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-4">
-              {asset.outputData?.frames
-                ?.map(
-                  (frame: any, idx: number) =>
-                    `${idx + 1}. ${frame.title ?? "Frame"}`
-                )
-                .join(" • ")}
-            </p>
-          </div>
-        );
-      default:
-        return null;
-    }
-  };
-
   return (
     <div className="space-y-6">
       <div className="card space-y-4">
@@ -224,8 +209,8 @@ export default function ProductionTool({
           <div>
             <h2 className="text-2xl font-bold">Single Prompt Production</h2>
             <p className="text-gray-600 dark:text-gray-400">
-              Orchestrate copy, art, audio, and storyboard outputs from one Suno-style
-              prompt.
+              Feed OmniForge a single brief and receive a fully authored manga episode:
+              narrative script, hero art, voiced narration, and cinematic storyboard.
             </p>
           </div>
         </div>
@@ -360,33 +345,14 @@ export default function ProductionTool({
         </button>
       </div>
 
-      {result && (
-        <div className="card space-y-6">
-          <div className="flex items-center gap-2 text-green-600">
+      {liveRunDisplay && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-blue-600 font-semibold">
             <CheckCircle2 className="w-5 h-5" />
-            Production complete (Run {result.runId})
+            Latest Production (preview)
           </div>
-
-          <div>
-            <h3 className="text-xl font-semibold mb-2">Creative Brief</h3>
-            <p className="text-gray-700 dark:text-gray-300 whitespace-pre-line">
-              {result.plan.summary}
-            </p>
-            {result.plan.callToAction && (
-              <p className="text-sm text-blue-600 mt-2">
-                CTA: {result.plan.callToAction}
-              </p>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {result.assets.text && renderHistoryAsset(result.assets.text)}
-            {result.assets.image && renderHistoryAsset(result.assets.image)}
-            {result.assets.audio && renderHistoryAsset(result.assets.audio)}
-            {result.assets.video && renderHistoryAsset(result.assets.video)}
-          </div>
-
-          {result.errors && Object.keys(result.errors).length > 0 && (
+          <ProductionRunCard data={liveRunDisplay} highlight />
+          {result?.errors && Object.keys(result.errors).length > 0 && (
             <div className="p-4 bg-yellow-100 text-yellow-800 rounded-md text-sm">
               Some modalities failed:{" "}
               {Object.entries(result.errors)
@@ -399,34 +365,223 @@ export default function ProductionTool({
       )}
 
       <div className="card">
-        <div className="flex items-center gap-2 mb-4">
-          <History className="w-5 h-5" />
-          <h3 className="text-xl font-semibold">Production History</h3>
+          <div className="flex items-center gap-2 mb-4">
+            <History className="w-5 h-5" />
+            <h3 className="text-xl font-semibold">Recent Productions</h3>
         </div>
 
-        {productionRuns.length === 0 ? (
+          {formattedRuns.length === 0 ? (
           <p className="text-sm text-gray-500">
             Run a production to build your history.
           </p>
         ) : (
-          <div className="space-y-4">
-            {productionRuns.map((run) => (
-              <div
-                key={run.runId}
-                className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-4"
-              >
-                <div className="flex items-center justify-between text-sm text-gray-500">
-                  <span>Run {run.runId}</span>
-                  <span>{new Date(run.createdAt).toLocaleString()}</span>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {run.assets.map((asset) => renderHistoryAsset(asset))}
-                </div>
-              </div>
-            ))}
+            <div className="space-y-6">
+              {formattedRuns.map((run) => (
+                <ProductionRunCard key={run.runId} data={run} />
+              ))}
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function buildRunDisplay(
+  run: ProductionRunAggregate,
+  planOverride?: ProductionResponse["plan"]
+): ProductionRunDisplay {
+  const textAsset = run.byType.TEXT;
+  const title =
+    planOverride?.title ??
+    textAsset?.outputData?.title ??
+    textAsset?.title ??
+    "OmniForge Production";
+  const summary =
+    planOverride?.summary ??
+    textAsset?.outputData?.summary ??
+    textAsset?.metadata?.summary ??
+    textAsset?.inputPrompt ??
+    "";
+  const callToAction =
+    planOverride?.callToAction ?? textAsset?.outputData?.callToAction;
+  const keywordsSource =
+    planOverride?.keywords ?? textAsset?.outputData?.keywords ?? [];
+  const keywords = Array.isArray(keywordsSource)
+    ? keywordsSource
+    : typeof keywordsSource === "string"
+    ? keywordsSource.split(",").map((keyword) => keyword.trim())
+    : [];
+  const prompt = textAsset?.metadata?.userPrompt ?? textAsset?.inputPrompt;
+
+  return {
+    ...run,
+    title,
+    summary,
+    callToAction,
+    keywords,
+    prompt,
+    textAsset,
+    imageAsset: run.byType.IMAGE,
+    audioAsset: run.byType.AUDIO,
+    videoAsset: run.byType.VIDEO,
+  };
+}
+
+function formatDateLabel(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function ProductionRunCard({
+  data,
+  highlight = false,
+}: {
+  data: ProductionRunDisplay;
+  highlight?: boolean;
+}) {
+  const { title, summary, callToAction, keywords, createdAt, prompt } = data;
+  const imageAsset = data.imageAsset;
+  const audioAsset = data.audioAsset;
+  const videoAsset = data.videoAsset;
+  const textAsset = data.textAsset;
+  const storyboardFrames = Array.isArray(videoAsset?.outputData?.frames)
+    ? videoAsset?.outputData?.frames.slice(0, 4)
+    : [];
+
+  return (
+    <div
+      className={`rounded-2xl border p-6 space-y-4 ${
+        highlight
+          ? "border-blue-200 ring-2 ring-blue-100"
+          : "border-gray-200 dark:border-gray-700"
+      } bg-white dark:bg-gray-900`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-gray-500">
+            Run {data.runId}
+          </p>
+          <h4 className="text-2xl font-semibold">{title}</h4>
+        </div>
+        <span className="text-sm text-gray-500">
+          {formatDateLabel(createdAt)}
+        </span>
+      </div>
+
+      <p className="text-gray-700 dark:text-gray-300 whitespace-pre-line">
+        {summary}
+      </p>
+
+      {keywords.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {keywords.map((keyword) => (
+            <span
+              key={keyword}
+              className="text-xs px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300"
+            >
+              {keyword}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {callToAction && (
+        <div className="p-3 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-200 text-sm">
+          CTA: {callToAction}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {imageAsset && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 font-semibold">
+              <ImageIcon className="w-4 h-4" />
+              Key Art
+            </div>
+            {imageAsset.outputData?.url ? (
+              <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
+                <Image
+                  src={imageAsset.outputData.url}
+                  alt={imageAsset.title}
+                  fill
+                  className="object-cover"
+                />
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">No visual generated.</p>
+            )}
+            <p className="text-xs text-gray-500">
+              Prompt: {imageAsset.inputPrompt}
+            </p>
+          </div>
+        )}
+
+        {audioAsset && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 font-semibold">
+              <Music className="w-4 h-4" />
+              Voiceover
+            </div>
+            {audioAsset.outputData?.dataUrl || audioAsset.outputData?.url ? (
+              <audio
+                controls
+                src={audioAsset.outputData.dataUrl || audioAsset.outputData.url}
+                className="w-full"
+              />
+            ) : (
+              <p className="text-sm text-gray-500">No audio stream stored.</p>
+            )}
+            <p className="text-xs text-gray-500">
+              Voice: {audioAsset.metadata?.voice?.toUpperCase?.() || "custom"} ·
+              Duration: ~{audioAsset.outputData?.duration || "--"}s
+            </p>
+          </div>
+        )}
+
+        {videoAsset && storyboardFrames.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 font-semibold">
+              <Video className="w-4 h-4" />
+              Storyboard
+            </div>
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+              {storyboardFrames.map((frame: any, index: number) => (
+                <div key={index} className="text-sm text-gray-600">
+                  <p className="font-semibold">
+                    {index + 1}. {frame.title || "Frame"}
+                  </p>
+                  <p className="text-xs text-gray-500">{frame.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {textAsset && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 font-semibold">
+              <FileText className="w-4 h-4" />
+              Script
+            </div>
+            <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-line line-clamp-6">
+              {textAsset.outputData?.script}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {prompt && (
+        <p className="text-xs text-gray-500">
+          Prompt: <span className="italic">{prompt}</span>
+        </p>
+      )}
     </div>
   );
 }
