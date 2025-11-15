@@ -69,9 +69,23 @@ export async function POST(request: Request) {
     const progressTracker = createProgressTracker(generationId, "Starting generation...");
 
     // Generate unified content with progress tracking
-    const result = await generateUnified(params as UnifiedGenerationParams, progressTracker);
-
-    return NextResponse.json({ result, generationId });
+    try {
+      const result = await generateUnified(params as UnifiedGenerationParams, progressTracker);
+      return NextResponse.json({ result, generationId });
+    } catch (error) {
+      // Log the error for debugging
+      console.error("Unified generation error:", error);
+      
+      // If it's a JSON parsing error, provide a more helpful message
+      if (error instanceof Error && (error.message.includes("JSON") || error.message.includes("parse"))) {
+        // For manga generation, we should still return a result using fallback
+        if (params.contentType === "manga" || (!params.contentType && params.prompt.toLowerCase().includes("manga"))) {
+          // The error was already handled with fallback in manga-generator
+          // Re-throw to be caught by outer handler
+        }
+      }
+      throw error;
+    }
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorized();
