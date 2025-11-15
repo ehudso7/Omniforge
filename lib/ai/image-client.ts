@@ -1,9 +1,11 @@
 import OpenAI from "openai";
 import { ImageGenerationParams, ImageGenerationResult } from "./types";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+function getOpenAIClient() {
+  return new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+}
 
 export async function generateImage(
   params: ImageGenerationParams
@@ -17,6 +19,7 @@ export async function generateImage(
   } = params;
 
   try {
+    const openai = getOpenAIClient();
     // DALL-E 3 only supports n=1
     const response = await openai.images.generate({
       model,

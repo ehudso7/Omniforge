@@ -1,9 +1,11 @@
 import OpenAI from "openai";
 import { TextGenerationParams, TextGenerationResult } from "./types";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+function getOpenAIClient() {
+  return new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+}
 
 export async function generateText(
   params: TextGenerationParams
@@ -17,6 +19,7 @@ export async function generateText(
   } = params;
 
   try {
+    const openai = getOpenAIClient();
     const response = await openai.chat.completions.create({
       model,
       messages: [
@@ -60,6 +63,7 @@ export async function streamText(
     model = "gpt-4o-mini",
   } = params;
 
+  const openai = getOpenAIClient();
   const stream = await openai.chat.completions.create({
     model,
     messages: [
