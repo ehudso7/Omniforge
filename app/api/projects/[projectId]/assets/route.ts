@@ -49,7 +49,7 @@ export async function GET(
     });
 
     // Parse JSON strings back to objects for SQLite
-    const parsedAssets = assets.map((asset) => ({
+    const parsedAssets = assets.map((asset: any) => ({
       ...asset,
       outputData: JSON.parse(asset.outputData),
       metadata: asset.metadata ? JSON.parse(asset.metadata) : null,
