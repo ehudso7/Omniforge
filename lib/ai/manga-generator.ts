@@ -260,7 +260,6 @@ Remember: Return ONLY the JSON, nothing else.`;
     }
     
     // Strategy 1: Try to find JSON in code blocks first
-    let jsonText = result.content.trim();
     const codeBlockMatch = jsonText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
     if (codeBlockMatch && codeBlockMatch[1]) {
       jsonText = codeBlockMatch[1].trim();
