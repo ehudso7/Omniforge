@@ -84,7 +84,11 @@ export async function POST(
 
     const asset = await prisma.asset.create({
       data: {
-        ...data,
+        type: data.type,
+        title: data.title,
+        inputPrompt: data.inputPrompt,
+        outputData: data.outputData,
+        metadata: data.metadata || null,
         projectId,
       },
     });
