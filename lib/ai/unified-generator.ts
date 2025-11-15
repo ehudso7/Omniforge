@@ -1,12 +1,11 @@
+import { generateCompleteProduction } from "./production-generator";
+import { generateMangaProduction } from "./manga-generator";
 import { generateText } from "./text-client";
-import { generateImage } from "./image-client";
-import { generateSpeech } from "./audio-client";
-import { generateStoryboard } from "./video-client";
 
 /**
  * Unified Generation System - Like Suno
- * Takes a single prompt and generates complete production-ready content
- * across all modalities (text, images, audio, video)
+ * Takes a single prompt and generates complete, finished, production-ready products
+ * Not just assets, but complete polished productions
  */
 
 export interface UnifiedGenerationParams {
@@ -54,6 +53,27 @@ export interface UnifiedGenerationResult {
         totalDuration: number;
       };
       title: string;
+    };
+    manga?: {
+      title: string;
+      synopsis: string;
+      coverImage?: string;
+      characters: Array<{
+        name: string;
+        description: string;
+        designUrl?: string;
+      }>;
+      pages: Array<{
+        pageNumber: number;
+        layout: "single" | "double" | "triple" | "quad";
+        panels: Array<{
+          imageUrl: string;
+          description: string;
+          dialogue?: string;
+          narration?: string;
+        }>;
+      }>;
+      totalPages: number;
     };
   };
   metadata: {
@@ -119,212 +139,127 @@ Return ONLY the JSON, no other text.`;
 }
 
 /**
- * Generates a complete production-ready output from a single prompt
+ * Generates a complete, finished production from a single prompt
+ * Like Suno: one prompt = one complete, polished product
  */
 export async function generateUnifiedProduction(
   params: UnifiedGenerationParams
 ): Promise<UnifiedGenerationResult> {
   const startTime = Date.now();
-  const { prompt, options = {} } = params;
+  const { prompt } = params;
 
-  // Determine what to generate
-  let generationPlan;
-  if (options.autoDetect !== false) {
-    // Auto-detect what content types are needed
-    generationPlan = await analyzePrompt(prompt);
-  } else {
-    // Use explicit options
-    generationPlan = {
-      needsText: options.includeText ?? true,
-      needsImages: options.includeImages ?? false,
-      needsAudio: options.includeAudio ?? false,
-      needsVideo: options.includeVideo ?? false,
-      contentType: "custom",
+  // Check if this is a manga request
+  const isMangaRequest = prompt.toLowerCase().includes("manga") || 
+                        prompt.toLowerCase().includes("comic") ||
+                        prompt.toLowerCase().includes("bleach") ||
+                        prompt.toLowerCase().includes("gintama") ||
+                        prompt.toLowerCase().includes("soul eater");
+
+  if (isMangaRequest) {
+    // Generate complete manga production
+    const mangaProduction = await generateMangaProduction({
+      prompt,
+      pages: 5, // Generate 5 pages for complete manga
+    });
+
+    // Convert to unified result format
+    return {
+      id: mangaProduction.id,
+      prompt,
+      generatedAt: new Date(),
+      outputs: {
+        manga: {
+          title: mangaProduction.title,
+          synopsis: mangaProduction.synopsis,
+          coverImage: mangaProduction.coverImage,
+          characters: mangaProduction.characters,
+          pages: mangaProduction.pages.map((page) => ({
+            pageNumber: page.pageNumber,
+            layout: page.layout,
+            panels: page.panels.map((panel) => ({
+              imageUrl: panel.imageUrl,
+              description: panel.description,
+              dialogue: panel.dialogue,
+              narration: panel.narration,
+            })),
+          })),
+          totalPages: mangaProduction.pages.length,
+        },
+      },
+      metadata: {
+        generationTime: mangaProduction.metadata.generationTime,
+        models: ["gpt-4o-mini", "dall-e-3"],
+      },
     };
   }
 
+  // For other types, use the production generator
+  const completeProduction = await generateCompleteProduction({
+    prompt,
+    productionType: "auto",
+  });
+
+  // Convert to unified result format
   const outputs: UnifiedGenerationResult["outputs"] = {};
-  const models: string[] = [];
-  let totalTokens = 0;
 
-  // Generate content in parallel where possible
-  const generationPromises: Promise<void>[] = [];
-
-  // Generate text content
-  if (generationPlan.needsText) {
-    generationPromises.push(
-      (async () => {
-        try {
-          const textSystemPrompt = `You are a professional content creator. Create high-quality, production-ready content based on the user's prompt. 
-Make it engaging, well-structured, and ready for publication.`;
-
-          const textResult = await generateText({
-            prompt,
-            systemPrompt: textSystemPrompt,
-            temperature: 0.8,
-            maxTokens: 2000,
-            model: "gpt-4o-mini",
-          });
-
-          outputs.text = {
-            content: textResult.content,
-            title: extractTitle(textResult.content) || "Generated Content",
-            model: textResult.model,
-          };
-
-          models.push(textResult.model);
-          if (textResult.usage) {
-            totalTokens += textResult.usage.totalTokens;
-          }
-        } catch (error) {
-          console.error("Text generation failed:", error);
-        }
-      })()
-    );
+  if (completeProduction.type === "manga" && "pages" in completeProduction.production) {
+    const manga = completeProduction.production as any;
+    outputs.manga = {
+      title: manga.title,
+      synopsis: manga.synopsis,
+      coverImage: manga.coverImage,
+      characters: manga.characters,
+      pages: manga.pages,
+      totalPages: manga.pages.length,
+    };
+  } else if (completeProduction.type === "article") {
+    const article = completeProduction.production as any;
+    outputs.text = {
+      content: article.content,
+      title: article.title,
+      model: "gpt-4o-mini",
+    };
+    outputs.images = article.images?.map((img: any, i: number) => ({
+      url: img.url,
+      title: `Image ${i + 1}`,
+      description: img.caption,
+      model: "dall-e-3",
+    }));
+  } else if (completeProduction.type === "story") {
+    const story = completeProduction.production as any;
+    outputs.text = {
+      content: story.content,
+      title: story.title,
+      model: "gpt-4o-mini",
+    };
+    if (story.coverImage) {
+      outputs.images = [{
+        url: story.coverImage,
+        title: "Cover",
+        description: "Story cover illustration",
+        model: "dall-e-3",
+      }];
+    }
+    if (story.audioNarration) {
+      outputs.audio = {
+        url: story.audioNarration.url,
+        title: "Audio Narration",
+        duration: story.audioNarration.duration,
+        model: "tts-1",
+      };
+    }
   }
-
-  // Generate images
-  if (generationPlan.needsImages) {
-    generationPromises.push(
-      (async () => {
-        try {
-          // Generate 1-2 images based on content type
-          const imageCount = generationPlan.contentType === "multimedia" ? 2 : 1;
-          const imagePromises: Promise<void>[] = [];
-
-          for (let i = 0; i < imageCount; i++) {
-            imagePromises.push(
-              (async () => {
-                const imagePrompt = i === 0 
-                  ? prompt 
-                  : `${prompt} - alternative perspective or detail view`;
-
-                const imageResult = await generateImage({
-                  prompt: imagePrompt,
-                  width: 1024,
-                  height: 1024,
-                  model: "dall-e-3",
-                });
-
-                if (!outputs.images) {
-                  outputs.images = [];
-                }
-
-                outputs.images.push({
-                  url: imageResult.url,
-                  title: `Image ${i + 1}`,
-                  description: imageResult.revisedPrompt || imagePrompt,
-                  model: imageResult.model,
-                });
-
-                models.push(imageResult.model);
-              })()
-            );
-          }
-
-          await Promise.all(imagePromises);
-        } catch (error) {
-          console.error("Image generation failed:", error);
-        }
-      })()
-    );
-  }
-
-  // Generate audio (speech or music)
-  if (generationPlan.needsAudio) {
-    generationPromises.push(
-      (async () => {
-        try {
-          // Determine if it's speech or music
-          const isMusic = generationPlan.contentType === "song" || 
-                         prompt.toLowerCase().includes("song") ||
-                         prompt.toLowerCase().includes("music");
-
-          if (isMusic) {
-            // For music, we'd need a music generation API
-            // For now, generate speech from the text content
-            const audioText = outputs.text?.content || prompt;
-            const audioResult = await generateSpeech({
-              text: audioText.substring(0, 1000), // Limit length
-              voice: "alloy",
-              model: "tts-1",
-            });
-
-            outputs.audio = {
-              url: audioResult.url,
-              title: "Generated Audio",
-              duration: audioResult.duration || 30,
-              model: audioResult.model,
-            };
-          } else {
-            // Generate speech
-            const audioText = outputs.text?.content || prompt;
-            const audioResult = await generateSpeech({
-              text: audioText.substring(0, 1000),
-              voice: "alloy",
-              model: "tts-1",
-            });
-
-            outputs.audio = {
-              url: audioResult.url,
-              title: "Generated Speech",
-              duration: audioResult.duration || 30,
-              model: audioResult.model,
-            };
-          }
-
-          models.push("tts-1");
-        } catch (error) {
-          console.error("Audio generation failed:", error);
-        }
-      })()
-    );
-  }
-
-  // Generate video storyboard
-  if (generationPlan.needsVideo) {
-    generationPromises.push(
-      (async () => {
-        try {
-          const videoResult = await generateStoryboard({
-            concept: prompt,
-            numberOfFrames: 5,
-            duration: 30,
-          });
-
-          outputs.video = {
-            storyboard: {
-              script: videoResult.script,
-              frames: videoResult.frames.map((frame) => ({
-                title: frame.title,
-                description: frame.description,
-                duration: frame.duration || 0,
-              })),
-              totalDuration: videoResult.totalDuration,
-            },
-            title: "Generated Video Storyboard",
-          };
-        } catch (error) {
-          console.error("Video generation failed:", error);
-        }
-      })()
-    );
-  }
-
-  // Wait for all generations to complete
-  await Promise.all(generationPromises);
 
   const generationTime = Date.now() - startTime;
 
   return {
-    id: `unified-${Date.now()}`,
+    id: completeProduction.id,
     prompt,
-    generatedAt: new Date(),
+    generatedAt: completeProduction.generatedAt,
     outputs,
     metadata: {
-      totalTokens,
       generationTime,
-      models: [...new Set(models)],
+      models: ["gpt-4o-mini", "dall-e-3"],
     },
   };
 }

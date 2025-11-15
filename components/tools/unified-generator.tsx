@@ -46,6 +46,27 @@ interface GenerationResult {
     };
     title: string;
   };
+  manga?: {
+    title: string;
+    synopsis: string;
+    coverImage?: string;
+    characters: Array<{
+      name: string;
+      description: string;
+      designUrl?: string;
+    }>;
+    pages: Array<{
+      pageNumber: number;
+      layout: "single" | "double" | "triple" | "quad";
+      panels: Array<{
+        imageUrl: string;
+        description: string;
+        dialogue?: string;
+        narration?: string;
+      }>;
+    }>;
+    totalPages: number;
+  };
 }
 
 export default function UnifiedGenerator({
@@ -139,7 +160,7 @@ export default function UnifiedGenerator({
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Example: 'Create a short story about a robot learning to paint, with illustrations and an audio narration'"
+            placeholder="Example: 'Create a manga about a robot learning to paint' or 'Create a complete story with illustrations'"
             className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white resize-none"
             rows={4}
             disabled={isGenerating}
@@ -293,11 +314,151 @@ export default function UnifiedGenerator({
             </div>
           )}
 
+          {/* Complete Manga Production */}
+          {result.manga && (
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+              <div className="mb-6">
+                <h2 className="text-3xl font-bold mb-2">{result.manga.title}</h2>
+                <p className="text-gray-600 dark:text-gray-400 mb-4">{result.manga.synopsis}</p>
+                
+                {/* Cover Image */}
+                {result.manga.coverImage && (
+                  <div className="mb-6">
+                    <div className="relative w-full max-w-md mx-auto aspect-[2/3] rounded-lg overflow-hidden">
+                      <Image
+                        src={result.manga.coverImage}
+                        alt={`${result.manga.title} cover`}
+                        fill
+                        className="object-cover"
+                        unoptimized
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Characters */}
+                {result.manga.characters && result.manga.characters.length > 0 && (
+                  <div className="mb-6">
+                    <h3 className="text-xl font-semibold mb-4">Characters</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {result.manga.characters.map((character, index) => (
+                        <div key={index} className="border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+                          {character.designUrl && (
+                            <div className="relative w-full aspect-square mb-3 rounded-lg overflow-hidden">
+                              <Image
+                                src={character.designUrl}
+                                alt={character.name}
+                                fill
+                                className="object-cover"
+                                unoptimized
+                              />
+                            </div>
+                          )}
+                          <h4 className="font-semibold mb-1">{character.name}</h4>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">{character.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Manga Pages */}
+              <div>
+                <h3 className="text-2xl font-semibold mb-4">
+                  Complete Manga ({result.manga.totalPages} pages)
+                </h3>
+                <div className="space-y-8">
+                  {result.manga.pages.map((page, pageIndex) => (
+                    <div key={pageIndex} className="border-2 border-gray-300 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-900">
+                      <div className="mb-3 flex items-center justify-between">
+                        <h4 className="text-lg font-semibold">Page {page.pageNumber}</h4>
+                        <span className="text-sm text-gray-500">Layout: {page.layout}</span>
+                      </div>
+                      
+                      {/* Panels Grid */}
+                      <div className={`grid gap-4 ${
+                        page.layout === "single" ? "grid-cols-1" :
+                        page.layout === "double" ? "grid-cols-2" :
+                        page.layout === "triple" ? "grid-cols-3" :
+                        "grid-cols-2 md:grid-cols-4"
+                      }`}>
+                        {page.panels.map((panel, panelIndex) => (
+                          <div key={panelIndex} className="relative group">
+                            <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                              <Image
+                                src={panel.imageUrl}
+                                alt={`Page ${page.pageNumber} Panel ${panelIndex + 1}`}
+                                fill
+                                className="object-contain"
+                                unoptimized
+                              />
+                              <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-opacity flex items-center justify-center">
+                                <button
+                                  onClick={() => handleDownload(panel.imageUrl, `page-${page.pageNumber}-panel-${panelIndex + 1}.png`)}
+                                  className="opacity-0 group-hover:opacity-100 bg-white text-gray-900 px-4 py-2 rounded-lg flex items-center gap-2 transition-opacity"
+                                >
+                                  <Download className="w-4 h-4" />
+                                  Download
+                                </button>
+                              </div>
+                            </div>
+                            
+                            {/* Dialogue and Narration */}
+                            {(panel.dialogue || panel.narration) && (
+                              <div className="mt-2 text-xs space-y-1">
+                                {panel.dialogue && (
+                                  <p className="text-gray-700 dark:text-gray-300 italic">
+                                    &ldquo;{panel.dialogue}&rdquo;
+                                  </p>
+                                )}
+                                {panel.narration && (
+                                  <p className="text-gray-500 dark:text-gray-400">
+                                    {panel.narration}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Download Complete Manga Button */}
+              <div className="mt-6 flex justify-center">
+                <button
+                  onClick={() => {
+                    if (!result.manga) return;
+                    // Create a downloadable JSON of the complete manga
+                    const mangaData = JSON.stringify(result.manga, null, 2);
+                    const blob = new Blob([mangaData], { type: "application/json" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `${result.manga.title.replace(/\s+/g, "-")}-complete-manga.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg flex items-center gap-2"
+                >
+                  <Download className="w-5 h-5" />
+                  Download Complete Manga Production
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Success Message */}
           <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 flex items-center gap-3">
             <CheckCircle className="w-5 h-5 text-green-600" />
             <p className="text-green-800 dark:text-green-200">
-              Production generated successfully! All assets have been saved to your project.
+              {result.manga 
+                ? `Complete manga "${result.manga.title}" generated successfully! All ${result.manga.totalPages} pages have been saved to your project.`
+                : "Production generated successfully! All assets have been saved to your project."
+              }
             </p>
           </div>
         </div>

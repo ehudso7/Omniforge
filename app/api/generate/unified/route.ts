@@ -135,6 +135,62 @@ export async function POST(request: Request) {
       savedAssets.push(videoAsset);
     }
 
+    // Save manga production as a complete production asset
+    if (result.outputs.manga) {
+      const mangaAsset = await prisma.asset.create({
+        data: {
+          projectId,
+          type: "TEXT", // Store as TEXT type but with complete manga data
+          title: result.outputs.manga.title,
+          inputPrompt: prompt,
+          outputData: {
+            type: "manga",
+            title: result.outputs.manga.title,
+            synopsis: result.outputs.manga.synopsis,
+            coverImage: result.outputs.manga.coverImage,
+            characters: result.outputs.manga.characters,
+            pages: result.outputs.manga.pages,
+            totalPages: result.outputs.manga.totalPages,
+          },
+          metadata: {
+            productionType: "manga",
+            generatedAt: result.generatedAt.toISOString(),
+            generationTime: result.metadata.generationTime,
+          },
+        },
+      });
+      savedAssets.push(mangaAsset);
+
+      // Also save individual page images for easy access
+      for (const page of result.outputs.manga.pages) {
+        for (const panel of page.panels) {
+          const panelAsset = await prisma.asset.create({
+            data: {
+              projectId,
+              type: "IMAGE",
+              title: `${result.outputs.manga.title} - Page ${page.pageNumber} Panel ${panel.description.substring(0, 50)}`,
+              inputPrompt: prompt,
+              outputData: {
+                url: panel.imageUrl,
+                description: panel.description,
+                dialogue: panel.dialogue,
+                narration: panel.narration,
+                mangaTitle: result.outputs.manga.title,
+                pageNumber: page.pageNumber,
+                panelNumber: panel.description,
+              },
+              metadata: {
+                mangaProduction: true,
+                pageNumber: page.pageNumber,
+                generatedAt: result.generatedAt.toISOString(),
+              },
+            },
+          });
+          savedAssets.push(panelAsset);
+        }
+      }
+    }
+
     return NextResponse.json({
       result,
       assets: savedAssets,
