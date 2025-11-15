@@ -1,9 +1,11 @@
 import OpenAI from "openai";
 import { AudioGenerationParams, AudioGenerationResult } from "./types";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+function getOpenAIClient() {
+  return new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+}
 
 export async function generateSpeech(
   params: AudioGenerationParams
@@ -11,6 +13,7 @@ export async function generateSpeech(
   const { text, voice = "alloy", model = "tts-1" } = params;
 
   try {
+    const openai = getOpenAIClient();
     const response = await openai.audio.speech.create({
       model,
       voice: voice as "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer",

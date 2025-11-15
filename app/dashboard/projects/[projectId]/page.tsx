@@ -4,6 +4,9 @@ import { authOptions } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import ProjectWorkspace from "@/components/dashboard/project-workspace";
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+
 export default async function ProjectPage({
   params,
 }: {

@@ -1,9 +1,11 @@
 import OpenAI from "openai";
 import { ImageGenerationParams, ImageGenerationResult } from "./types";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+function getOpenAIClient() {
+  return new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+}
 
 export async function generateImage(
   params: ImageGenerationParams
@@ -17,6 +19,7 @@ export async function generateImage(
   } = params;
 
   try {
+    const openai = getOpenAIClient();
     // DALL-E 3 only supports n=1
     const response = await openai.images.generate({
       model,
@@ -25,6 +28,10 @@ export async function generateImage(
       size: `${width}x${height}` as "1024x1024" | "1792x1024" | "1024x1792",
       response_format: "url",
     });
+
+    if (!response.data || response.data.length === 0) {
+      throw new Error("No image data in response");
+    }
 
     const imageData = response.data[0];
 

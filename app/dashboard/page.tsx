@@ -4,6 +4,9 @@ import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import ProjectList from "@/components/dashboard/project-list";
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
 
