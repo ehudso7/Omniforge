@@ -61,7 +61,7 @@ export async function generateManga(
   const { prompt, title, pages = 10, style = "shonen" } = params;
 
   // Step 1: Generate complete story structure
-  const storyStructure = await generateStoryStructure(prompt, title, pages, style);
+  const storyStructure = await generateStoryStructure(prompt, pages, style, title);
 
   // Step 2: Generate character designs
   const characters = await generateCharacters(storyStructure.characters, style);
@@ -118,9 +118,9 @@ interface StoryStructure {
  */
 async function generateStoryStructure(
   prompt: string,
-  title?: string,
   pages: number = 10,
-  style: string = "shonen"
+  style: string = "shonen",
+  title?: string
 ): Promise<StoryStructure> {
   const systemPrompt = `You are a professional manga writer and storyboard artist. Create a complete, original manga story that is production-ready.
 
@@ -266,7 +266,7 @@ Return ONLY a valid JSON object with this exact structure (no other text):
   } catch (error) {
     console.error("Story structure generation error:", error);
     // Fallback structure
-    return createFallbackStoryStructure(prompt, title, pages, style);
+    return createFallbackStoryStructure(prompt, pages, style, title);
   }
 }
 
@@ -451,9 +451,9 @@ async function generatePanelImages(
  */
 function createFallbackStoryStructure(
   prompt: string,
-  title?: string,
   pages: number,
-  style: string
+  style: string,
+  title?: string
 ): StoryStructure {
   return {
     title: title || "Untitled Manga",
