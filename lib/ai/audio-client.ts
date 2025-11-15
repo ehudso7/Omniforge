@@ -1,10 +1,17 @@
 import OpenAI from "openai";
+import { Buffer } from "buffer";
 import { AudioGenerationParams, AudioGenerationResult } from "./types";
+import { generateText } from "./text-client";
 
 function getOpenAIClient() {
   return new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
   });
+}
+
+function bufferToDataUrl(buffer: Buffer, mimeType: string) {
+  const base64 = buffer.toString("base64");
+  return `data:${mimeType};base64,${base64}`;
 }
 
 export async function generateSpeech(
@@ -18,20 +25,17 @@ export async function generateSpeech(
       model,
       voice: voice as "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer",
       input: text,
+      format: "mp3",
     });
 
-    // In a real implementation, you would:
-    // 1. Convert the response to a buffer
-    // 2. Upload to cloud storage (S3, Cloudinary, etc.)
-    // 3. Return the permanent URL
-
-    // For now, we'll return a stub
-    // The buffer can be accessed via: await response.arrayBuffer()
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const dataUrl = bufferToDataUrl(buffer, "audio/mpeg");
 
     return {
-      url: "/api/audio/placeholder", // This should be replaced with actual URL
+      url: dataUrl,
       model,
-      duration: Math.ceil(text.length / 15), // Rough estimate: ~15 chars per second
+      duration: Math.max(5, Math.ceil(text.length / 15)),
     };
   } catch (error) {
     console.error("Audio generation error:", error);
@@ -41,17 +45,34 @@ export async function generateSpeech(
   }
 }
 
-// Stub for music generation (could integrate with MusicGen, Suno, etc.)
+// Lightweight adaptive music experience:
+// We derive a cinematic narration/lyrics track from the prompt,
+// synthesize it, and return a playable audio bundle.
 export async function generateMusic(params: {
   prompt: string;
   duration?: number;
 }): Promise<AudioGenerationResult> {
-  // This is a stub - integrate with actual music generation API
-  console.log("Music generation requested:", params);
+  const narrationPrompt = `You are a creative music director. Based on the concept below, craft a vivid lyrical narration (no more than 120 words) that could guide a cinematic soundtrack. Focus on rhythm and imagery rather than instructions.
+
+Concept: ${params.prompt}`;
+
+  const narration = await generateText({
+    prompt: narrationPrompt,
+    systemPrompt:
+      "You write lyrical, rhythmic narrations that can be read dramatically over cinematic music.",
+    temperature: 0.9,
+    maxTokens: 400,
+  });
+
+  const speech = await generateSpeech({
+    text: narration.content,
+    voice: "shimmer",
+    model: "tts-1",
+  });
 
   return {
-    url: "/api/audio/music-placeholder",
-    model: "music-stub",
-    duration: params.duration || 30,
+    url: speech.url,
+    model: speech.model,
+    duration: speech.duration ?? params.duration ?? 30,
   };
 }
