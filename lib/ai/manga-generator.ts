@@ -135,7 +135,9 @@ Create a complete story with:
 5. Page-by-page breakdown with key events
 6. Panel descriptions for each page
 
-Make it completely original and unique. Avoid any copyright material.`;
+Make it completely original and unique. Avoid any copyright material.
+
+IMPORTANT: Return ONLY valid JSON. Do not include any explanatory text before or after the JSON.`;
 
   const storyPrompt = title
     ? `Create a complete ${pages}-page ${style} manga titled "${title}" based on: ${prompt}
@@ -147,7 +149,7 @@ The manga must be:
 - Include compelling characters
 - Be production-ready
 
-Return a JSON object with this structure:
+Return ONLY a valid JSON object with this exact structure (no other text):
 {
   "title": "Manga Title",
   "synopsis": "Complete synopsis of the story",
@@ -178,7 +180,7 @@ The manga must be:
 - Include compelling characters
 - Be production-ready
 
-Return a JSON object with this structure:
+Return ONLY a valid JSON object with this exact structure (no other text):
 {
   "title": "Manga Title",
   "synopsis": "Complete synopsis of the story",
@@ -209,14 +211,58 @@ Return a JSON object with this structure:
       model: "gpt-4o-mini",
     });
 
-    // Extract JSON from response
-    const jsonMatch = result.content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error("Could not parse story structure");
+    // Extract JSON from response - try multiple strategies
+    let jsonText = result.content.trim();
+    
+    // Strategy 1: Find JSON object boundaries
+    const jsonStart = jsonText.indexOf('{');
+    const jsonEnd = jsonText.lastIndexOf('}');
+    
+    if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+      jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
+    }
+    
+    // Strategy 2: Try to find JSON in code blocks
+    const codeBlockMatch = jsonText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+    if (codeBlockMatch) {
+      jsonText = codeBlockMatch[1];
+    }
+    
+    // Clean up common issues
+    jsonText = jsonText
+      .replace(/^[^{]*/, '') // Remove anything before first {
+      .replace(/[^}]*$/, '}') // Remove anything after last }
+      .trim();
+
+    if (!jsonText || !jsonText.startsWith('{')) {
+      throw new Error("Could not extract JSON from response");
     }
 
-    const parsed = JSON.parse(jsonMatch[0]);
-    return parsed as StoryStructure;
+    const parsed = JSON.parse(jsonText);
+    
+    // Validate and ensure required fields
+    const validated: StoryStructure = {
+      title: parsed.title || title || "Untitled Manga",
+      synopsis: parsed.synopsis || `A complete ${style} manga story based on: ${prompt}`,
+      genre: parsed.genre || style,
+      storyArc: parsed.storyArc || "Complete story arc with beginning, middle, and end",
+      characters: Array.isArray(parsed.characters) && parsed.characters.length > 0
+        ? parsed.characters
+        : [{
+            name: "Main Character",
+            role: "protagonist",
+            description: "The main character of the story",
+          }],
+      pageBreakdown: Array.isArray(parsed.pageBreakdown) && parsed.pageBreakdown.length > 0
+        ? parsed.pageBreakdown
+        : Array.from({ length: pages }, (_, i) => ({
+            pageNumber: i + 1,
+            summary: `Page ${i + 1} of the story`,
+            keyEvents: [`Event on page ${i + 1}`],
+          })),
+    };
+    
+    return validated;
   } catch (error) {
     console.error("Story structure generation error:", error);
     // Fallback structure
@@ -274,7 +320,7 @@ Create 4-6 panels for this page with:
 - Action and movement
 - Manga-style composition
 
-Return JSON:
+Return ONLY valid JSON (no other text):
 {
   "panels": [
     {
@@ -290,25 +336,55 @@ Return JSON:
     try {
       const result = await generateText({
         prompt: pagePrompt,
-        systemPrompt: "You are a professional manga storyboard artist. Create detailed panel descriptions.",
+        systemPrompt: "You are a professional manga storyboard artist. Create detailed panel descriptions. Return ONLY valid JSON, no other text.",
         temperature: 0.7,
         maxTokens: 2000,
         model: "gpt-4o-mini",
       });
 
-      const jsonMatch = result.content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        pagesData.push({
-          pageNumber: pageBreakdown.pageNumber,
-          panels: parsed.panels.map((p: any) => ({
-            panelNumber: p.panelNumber,
-            description: p.description,
-            dialogue: p.dialogue || [],
-            visualStyle: p.visualStyle || "standard",
-          })),
-          narration: parsed.narration,
-        });
+      // Extract JSON from response
+      let jsonText = result.content.trim();
+      
+      // Find JSON object boundaries
+      const jsonStart = jsonText.indexOf('{');
+      const jsonEnd = jsonText.lastIndexOf('}');
+      
+      if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+        jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
+      }
+      
+      // Try code block extraction
+      const codeBlockMatch = jsonText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+      if (codeBlockMatch) {
+        jsonText = codeBlockMatch[1];
+      }
+      
+      // Clean up
+      jsonText = jsonText
+        .replace(/^[^{]*/, '')
+        .replace(/[^}]*$/, '}')
+        .trim();
+
+      if (jsonText && jsonText.startsWith('{')) {
+        const parsed = JSON.parse(jsonText);
+        
+        // Ensure panels array exists
+        if (parsed.panels && Array.isArray(parsed.panels)) {
+          pagesData.push({
+            pageNumber: pageBreakdown.pageNumber,
+            panels: parsed.panels.map((p: any, idx: number) => ({
+              panelNumber: p.panelNumber || idx + 1,
+              description: p.description || pageBreakdown.summary,
+              dialogue: Array.isArray(p.dialogue) ? p.dialogue : [],
+              visualStyle: p.visualStyle || "standard",
+            })),
+            narration: parsed.narration || undefined,
+          });
+        } else {
+          throw new Error("Invalid panels structure");
+        }
+      } else {
+        throw new Error("Could not extract JSON");
       }
     } catch (error) {
       console.error(`Error generating page ${pageBreakdown.pageNumber}:`, error);
