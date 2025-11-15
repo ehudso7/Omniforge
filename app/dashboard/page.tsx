@@ -8,21 +8,35 @@ import ProjectList from "@/components/dashboard/project-list";
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
-  const session = await getServerSession(authOptions);
+  let session;
+
+  try {
+    session = await getServerSession(authOptions);
+  } catch (error) {
+    console.error("Session error:", error);
+    redirect("/auth/signin");
+  }
 
   if (!session) {
     redirect("/auth/signin");
   }
 
-  const projects = await prisma.project.findMany({
-    where: { userId: session.user.id },
-    orderBy: { updatedAt: "desc" },
-    include: {
-      _count: {
-        select: { assets: true },
+  let projects = [];
+
+  try {
+    projects = await prisma.project.findMany({
+      where: { userId: session.user.id },
+      orderBy: { updatedAt: "desc" },
+      include: {
+        _count: {
+          select: { assets: true },
+        },
       },
-    },
-  });
+    });
+  } catch (error) {
+    console.error("Database error:", error);
+    // Continue with empty projects array
+  }
 
   return (
     <div className="container mx-auto px-4 py-8">

@@ -13,23 +13,37 @@ export default async function ProjectPage({
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = await params;
-  const session = await getServerSession(authOptions);
+  let session;
+
+  try {
+    session = await getServerSession(authOptions);
+  } catch (error) {
+    console.error("Session error:", error);
+    redirect("/auth/signin");
+  }
 
   if (!session) {
     redirect("/auth/signin");
   }
 
-  const project = await prisma.project.findFirst({
-    where: {
-      id: projectId,
-      userId: session.user.id,
-    },
-    include: {
-      assets: {
-        orderBy: { createdAt: "desc" },
+  let project;
+
+  try {
+    project = await prisma.project.findFirst({
+      where: {
+        id: projectId,
+        userId: session.user.id,
       },
-    },
-  });
+      include: {
+        assets: {
+          orderBy: { createdAt: "desc" },
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Database error:", error);
+    notFound();
+  }
 
   if (!project) {
     notFound();

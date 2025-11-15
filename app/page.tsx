@@ -7,7 +7,14 @@ import { redirect } from "next/navigation";
 export const dynamic = 'force-dynamic';
 
 export default async function Home() {
-  const session = await getServerSession(authOptions);
+  let session = null;
+
+  try {
+    session = await getServerSession(authOptions);
+  } catch (error) {
+    console.error("Session check failed:", error);
+    // Continue without session - user can still see landing page
+  }
 
   if (session) {
     redirect("/dashboard");
