@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles, Loader2, Download, Play, Image as ImageIcon, Music, Video, FileText } from "lucide-react";
+import { Sparkles, Loader2, Download, Play, Image as ImageIcon, Music, Video, FileText, BookOpen } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
@@ -9,7 +9,7 @@ interface UnifiedCreatorProps {
   projectId: string;
 }
 
-type ContentType = "auto" | "text" | "image" | "audio" | "video";
+type ContentType = "auto" | "text" | "image" | "audio" | "video" | "manga";
 
 interface GenerationResult {
   contentType: ContentType;
@@ -20,6 +20,25 @@ interface GenerationResult {
     image?: { url: string; revisedPrompt?: string };
     audio?: { url: string; duration: number; lyrics?: string };
     video?: { url: string; duration: number; script?: string; thumbnail?: string };
+    manga?: {
+      title: string;
+      synopsis: string;
+      genre: string;
+      characters: Array<{ name: string; description: string; role: string }>;
+      pages: Array<{
+        pageNumber: number;
+        panels: Array<{
+          panelNumber: number;
+          description: string;
+          dialogue?: string[];
+          imageUrl?: string;
+        }>;
+        narration?: string;
+      }>;
+      totalPanels: number;
+      storyArc: string;
+      metadata: { pagesGenerated: number; panelsGenerated: number };
+    };
   };
   metadata: {
     model: string;
@@ -75,7 +94,10 @@ export default function UnifiedCreator({ projectId }: UnifiedCreatorProps) {
       let assetType: "TEXT" | "IMAGE" | "AUDIO" | "VIDEO" = "TEXT";
       let outputData: any = {};
 
-      if (generationResult.output.text) {
+      if (generationResult.output.manga) {
+        assetType = "TEXT"; // Store manga as TEXT type with full structure
+        outputData = generationResult.output.manga;
+      } else if (generationResult.output.text) {
         assetType = "TEXT";
         outputData = { content: generationResult.output.text.content };
       } else if (generationResult.output.image) {
@@ -128,6 +150,8 @@ export default function UnifiedCreator({ projectId }: UnifiedCreatorProps) {
         return <Music className="w-5 h-5" />;
       case "video":
         return <Video className="w-5 h-5" />;
+      case "manga":
+        return <BookOpen className="w-5 h-5" />;
       default:
         return <Sparkles className="w-5 h-5" />;
     }
@@ -149,8 +173,8 @@ export default function UnifiedCreator({ projectId }: UnifiedCreatorProps) {
         {/* Content Type Selector */}
         <div className="mb-6">
           <label className="label mb-2">What would you like to create?</label>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-            {(["auto", "text", "image", "audio", "video"] as ContentType[]).map((type) => (
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+            {(["auto", "text", "image", "audio", "video", "manga"] as ContentType[]).map((type) => (
               <button
                 key={type}
                 onClick={() => setContentType(type)}
@@ -183,6 +207,8 @@ export default function UnifiedCreator({ projectId }: UnifiedCreatorProps) {
                 ? "e.g., 'A futuristic cityscape at sunset, cyberpunk style'..."
                 : contentType === "audio"
                 ? "e.g., 'An upbeat pop song about adventure and freedom'..."
+                : contentType === "manga"
+                ? "e.g., 'A shonen manga about a young warrior discovering their powers'..."
                 : "e.g., 'A cinematic video about space exploration'..."
             }
             rows={5}
@@ -331,6 +357,102 @@ export default function UnifiedCreator({ projectId }: UnifiedCreatorProps) {
                     <div className="text-sm whitespace-pre-wrap">{result.output.video.script}</div>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Manga Result */}
+          {result.output.manga && (
+            <div className="space-y-6">
+              {/* Manga Header */}
+              <div className="p-6 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg">
+                <h2 className="text-2xl font-bold mb-2">{result.output.manga.title}</h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                  <span className="font-semibold">Genre:</span> {result.output.manga.genre}
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  <span className="font-semibold">Pages:</span> {result.output.manga.metadata.pagesGenerated} • 
+                  <span className="font-semibold"> Panels:</span> {result.output.manga.metadata.panelsGenerated}
+                </p>
+                <div className="mt-4">
+                  <h3 className="font-semibold mb-2">Synopsis</h3>
+                  <p className="text-sm whitespace-pre-wrap">{result.output.manga.synopsis}</p>
+                </div>
+              </div>
+
+              {/* Characters */}
+              {result.output.manga.characters.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">Characters</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {result.output.manga.characters.map((char, idx) => (
+                      <div key={idx} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                        <h4 className="font-semibold">{char.name}</h4>
+                        <p className="text-xs text-gray-500 mb-1">{char.role}</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">{char.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Pages */}
+              <div>
+                <h3 className="text-lg font-semibold mb-3">Manga Pages</h3>
+                <div className="space-y-6">
+                  {result.output.manga.pages.map((page) => (
+                    <div key={page.pageNumber} className="border-2 border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="text-lg font-semibold">Page {page.pageNumber}</h4>
+                        <span className="text-sm text-gray-500">{page.panels.length} panels</span>
+                      </div>
+                      
+                      {page.narration && (
+                        <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded">
+                          <p className="text-sm italic">{page.narration}</p>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {page.panels.map((panel) => (
+                          <div key={panel.panelNumber} className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-semibold text-gray-500">Panel {panel.panelNumber}</span>
+                              <span className="text-xs text-gray-400">({panel.visualStyle})</span>
+                            </div>
+                            
+                            {panel.imageUrl && (
+                              <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
+                                <Image
+                                  src={panel.imageUrl}
+                                  alt={`Panel ${panel.panelNumber}`}
+                                  fill
+                                  className="object-contain"
+                                />
+                              </div>
+                            )}
+                            
+                            <p className="text-sm text-gray-600 dark:text-gray-400">{panel.description}</p>
+                            
+                            {panel.dialogue && panel.dialogue.length > 0 && (
+                              <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
+                                {panel.dialogue.map((line, idx) => (
+                                  <p key={idx} className="text-xs mb-1">{line}</p>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Story Arc */}
+              <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                <h3 className="font-semibold mb-2">Story Arc</h3>
+                <p className="text-sm whitespace-pre-wrap">{result.output.manga.storyArc}</p>
               </div>
             </div>
           )}

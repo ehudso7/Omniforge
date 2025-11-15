@@ -7,7 +7,7 @@ import { z } from "zod";
 
 const unifiedGenerationSchema = z.object({
   prompt: z.string().min(1).max(5000),
-  contentType: z.enum(["text", "image", "audio", "video", "auto"]).optional(),
+  contentType: z.enum(["text", "image", "audio", "video", "manga", "auto"]).optional(),
   title: z.string().max(200).optional(),
   textOptions: z
     .object({
@@ -33,6 +33,12 @@ const unifiedGenerationSchema = z.object({
     .object({
       style: z.enum(["cinematic", "documentary", "animated", "vlog"]).optional(),
       duration: z.number().min(5).max(300).optional(),
+    })
+    .optional(),
+  mangaOptions: z
+    .object({
+      pages: z.number().min(1).max(50).optional(),
+      style: z.enum(["shonen", "shoujo", "seinen", "josei", "comic", "webtoon"]).optional(),
     })
     .optional(),
 });

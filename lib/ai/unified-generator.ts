@@ -7,9 +7,10 @@ import { generateText } from "./text-client";
 import { generateImage } from "./image-client";
 import { generateSpeech, generateMusic } from "./audio-client";
 import { generateStoryboard, generateVideo } from "./video-client";
+import { generateManga, MangaResult } from "./manga-generator";
 import { env } from "@/lib/env";
 
-export type ContentType = "text" | "image" | "audio" | "video" | "auto";
+export type ContentType = "text" | "image" | "audio" | "video" | "manga" | "auto";
 
 export interface UnifiedGenerationParams {
   prompt: string;
@@ -33,6 +34,10 @@ export interface UnifiedGenerationParams {
   videoOptions?: {
     style?: "cinematic" | "documentary" | "animated" | "vlog";
     duration?: number; // seconds
+  };
+  mangaOptions?: {
+    pages?: number; // Number of pages (default: 10)
+    style?: "shonen" | "shoujo" | "seinen" | "josei" | "comic" | "webtoon";
   };
 }
 
@@ -66,6 +71,8 @@ export interface UnifiedGenerationResult {
       thumbnail?: string;
       script?: string;
     };
+    // Manga output
+    manga?: MangaResult;
   };
   metadata: {
     model: string;
@@ -92,6 +99,20 @@ function detectContentType(prompt: string): ContentType {
     lowerPrompt.includes("audio")
   ) {
     return "audio";
+  }
+
+  // Manga/Comic keywords (check before video)
+  if (
+    lowerPrompt.includes("manga") ||
+    lowerPrompt.includes("comic") ||
+    lowerPrompt.includes("graphic novel") ||
+    lowerPrompt.includes("webtoon") ||
+    lowerPrompt.includes("manhwa") ||
+    lowerPrompt.includes("panel") ||
+    lowerPrompt.includes("shonen") ||
+    lowerPrompt.includes("shoujo")
+  ) {
+    return "manga";
   }
 
   // Video keywords
@@ -349,6 +370,17 @@ export async function generateUnified(
         );
         output.video = videoOutput;
         model = "video-generation"; // Would be actual model name
+        break;
+
+      case "manga":
+        const mangaOutput = await generateManga({
+          prompt: params.prompt,
+          title: params.title,
+          pages: params.mangaOptions?.pages || 10,
+          style: params.mangaOptions?.style || "shonen",
+        });
+        output.manga = mangaOutput;
+        model = "manga-generation";
         break;
 
       case "auto":
