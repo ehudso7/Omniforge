@@ -33,7 +33,14 @@ export async function GET(
       return notFound("Asset not found");
     }
 
-    return NextResponse.json({ asset });
+    // Parse JSON strings back to objects for SQLite
+    const parsedAsset = {
+      ...asset,
+      outputData: JSON.parse(asset.outputData),
+      metadata: asset.metadata ? JSON.parse(asset.metadata) : null,
+    };
+
+    return NextResponse.json({ asset: parsedAsset });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorized();

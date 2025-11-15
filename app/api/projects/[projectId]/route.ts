@@ -38,7 +38,17 @@ export async function GET(
       return notFound("Project not found");
     }
 
-    return NextResponse.json({ project });
+    // Parse JSON strings back to objects for SQLite
+    const parsedProject = {
+      ...project,
+      assets: project.assets.map((asset) => ({
+        ...asset,
+        outputData: JSON.parse(asset.outputData),
+        metadata: asset.metadata ? JSON.parse(asset.metadata) : null,
+      })),
+    };
+
+    return NextResponse.json({ project: parsedProject });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorized();

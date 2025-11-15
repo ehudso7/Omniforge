@@ -48,7 +48,14 @@ export async function GET(
       orderBy: { createdAt: "desc" },
     });
 
-    return NextResponse.json({ assets });
+    // Parse JSON strings back to objects for SQLite
+    const parsedAssets = assets.map((asset) => ({
+      ...asset,
+      outputData: JSON.parse(asset.outputData),
+      metadata: asset.metadata ? JSON.parse(asset.metadata) : null,
+    }));
+
+    return NextResponse.json({ assets: parsedAssets });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorized();
@@ -82,14 +89,26 @@ export async function POST(
     const body = await request.json();
     const data = createAssetSchema.parse(body);
 
+    // Stringify JSON for SQLite storage
     const asset = await prisma.asset.create({
       data: {
-        ...data,
+        type: data.type,
+        title: data.title,
+        inputPrompt: data.inputPrompt,
+        outputData: JSON.stringify(data.outputData),
+        metadata: data.metadata ? JSON.stringify(data.metadata) : null,
         projectId,
       },
     });
 
-    return NextResponse.json({ asset }, { status: 201 });
+    // Parse back to return to client
+    const parsedAsset = {
+      ...asset,
+      outputData: JSON.parse(asset.outputData),
+      metadata: asset.metadata ? JSON.parse(asset.metadata) : null,
+    };
+
+    return NextResponse.json({ asset: parsedAsset }, { status: 201 });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorized();
