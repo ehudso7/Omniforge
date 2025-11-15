@@ -865,6 +865,11 @@ Return ONLY the JSON object, nothing else.`,
         ],
       });
     }
+    } catch (outerError) {
+      // Catch any unexpected errors at the top level of page generation
+      console.error(`Unexpected error in page generation:`, outerError);
+      // Continue to next page - don't let one page fail the whole generation
+    }
   }
 
   // Ensure we always return at least the expected number of pages
