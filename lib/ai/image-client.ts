@@ -26,6 +26,10 @@ export async function generateImage(
       response_format: "url",
     });
 
+    if (!response.data || response.data.length === 0) {
+      throw new Error("No image data in response");
+    }
+
     const imageData = response.data[0];
 
     if (!imageData?.url) {
