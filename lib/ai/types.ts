@@ -40,9 +40,12 @@ export interface AudioGenerationParams {
 }
 
 export interface AudioGenerationResult {
-  url: string;
+  url?: string;
+  dataUrl?: string;
   model: string;
   duration?: number;
+  format?: string;
+  sizeBytes?: number;
 }
 
 export interface VideoStoryboardFrame {

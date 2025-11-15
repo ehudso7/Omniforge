@@ -11,7 +11,7 @@ interface Asset {
   inputPrompt: string;
   outputData: any;
   metadata: any;
-  createdAt: Date;
+  createdAt: string | Date;
 }
 
 interface ImageToolProps {

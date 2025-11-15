@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Clock, Loader2, Music } from "lucide-react";
+import { Clock, Loader2, Music, AudioLines } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 interface Asset {
@@ -10,7 +10,7 @@ interface Asset {
   inputPrompt: string;
   outputData: any;
   metadata: any;
-  createdAt: Date;
+  createdAt: string | Date;
 }
 
 interface AudioToolProps {
@@ -25,13 +25,18 @@ export default function AudioTool({ projectId, assets }: AudioToolProps) {
   const [type, setType] = useState<"speech" | "music">("speech");
   const [voice, setVoice] = useState("alloy");
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState("");
+  const [result, setResult] = useState<{
+    dataUrl?: string;
+    url?: string;
+    duration?: number;
+    format?: string;
+  } | null>(null);
 
   const generate = async () => {
     if (!text.trim()) return;
 
     setLoading(true);
-    setResult("");
+      setResult(null);
 
     try {
       const response = await fetch("/api/generate/audio", {
@@ -46,8 +51,8 @@ export default function AudioTool({ projectId, assets }: AudioToolProps) {
 
       if (!response.ok) throw new Error("Generation failed");
 
-      const { result: generationResult } = await response.json();
-      setResult(generationResult.url);
+        const { result: generationResult } = await response.json();
+        setResult(generationResult);
 
       // Save to assets
       await fetch(`/api/projects/${projectId}/assets`, {
@@ -57,10 +62,12 @@ export default function AudioTool({ projectId, assets }: AudioToolProps) {
           type: "AUDIO",
           title: title || `Audio - ${new Date().toLocaleString()}`,
           inputPrompt: text,
-          outputData: {
-            url: generationResult.url,
-            duration: generationResult.duration,
-          },
+            outputData: {
+              dataUrl: generationResult.dataUrl ?? generationResult.url,
+              url: generationResult.url,
+              duration: generationResult.duration,
+              format: generationResult.format,
+            },
           metadata: {
             model: generationResult.model,
             type,
@@ -71,7 +78,7 @@ export default function AudioTool({ projectId, assets }: AudioToolProps) {
 
       router.refresh();
       setTitle("");
-      setText("");
+        setText("");
     } catch (error) {
       console.error("Error generating audio:", error);
       alert("Failed to generate audio");
@@ -175,19 +182,30 @@ export default function AudioTool({ projectId, assets }: AudioToolProps) {
             </button>
           </div>
 
-          {result && (
-            <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-800 rounded-md">
-              <h3 className="font-semibold mb-2">Result:</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                {type === "music"
-                  ? "Music generation is a stub. In production, this would integrate with services like MusicGen or Suno."
-                  : "Audio URL (in production, this would be a real downloadable file)"}
-              </p>
-              <code className="text-xs bg-white dark:bg-gray-900 p-2 rounded block">
-                {result}
-              </code>
-            </div>
-          )}
+            {result && (
+              <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-800 rounded-md space-y-2">
+                <h3 className="font-semibold mb-2 flex items-center gap-2">
+                  <AudioLines className="w-4 h-4" />
+                  Preview
+                </h3>
+                {result.dataUrl || result.url ? (
+                  <audio
+                    controls
+                    src={result.dataUrl || result.url}
+                    className="w-full"
+                  />
+                ) : (
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    No audio stream available.
+                  </p>
+                )}
+                {result.duration && (
+                  <p className="text-xs text-gray-500">
+                    Duration: ~{result.duration}s
+                  </p>
+                )}
+              </div>
+            )}
         </div>
       </div>
 
@@ -220,11 +238,18 @@ export default function AudioTool({ projectId, assets }: AudioToolProps) {
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
                     <strong>Input:</strong> {asset.inputPrompt}
                   </p>
-                  {asset.outputData.duration && (
-                    <p className="text-xs text-gray-500">
-                      Duration: ~{asset.outputData.duration}s
-                    </p>
-                  )}
+                    {asset.outputData?.dataUrl || asset.outputData?.url ? (
+                      <audio
+                        controls
+                        src={asset.outputData.dataUrl || asset.outputData.url}
+                        className="w-full mt-2"
+                      />
+                    ) : null}
+                    {asset.outputData?.duration && (
+                      <p className="text-xs text-gray-500">
+                        Duration: ~{asset.outputData.duration}s
+                      </p>
+                    )}
                 </div>
               ))}
             </div>

@@ -18,20 +18,21 @@ export async function generateSpeech(
       model,
       voice: voice as "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer",
       input: text,
+      response_format: "mp3",
     });
 
-    // In a real implementation, you would:
-    // 1. Convert the response to a buffer
-    // 2. Upload to cloud storage (S3, Cloudinary, etc.)
-    // 3. Return the permanent URL
-
-    // For now, we'll return a stub
-    // The buffer can be accessed via: await response.arrayBuffer()
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const base64Audio = buffer.toString("base64");
+    const dataUrl = `data:audio/mpeg;base64,${base64Audio}`;
 
     return {
-      url: "/api/audio/placeholder", // This should be replaced with actual URL
+      url: dataUrl,
+      dataUrl,
       model,
       duration: Math.ceil(text.length / 15), // Rough estimate: ~15 chars per second
+      format: "audio/mpeg",
+      sizeBytes: buffer.length,
     };
   } catch (error) {
     console.error("Audio generation error:", error);
@@ -50,8 +51,11 @@ export async function generateMusic(params: {
   console.log("Music generation requested:", params);
 
   return {
-    url: "/api/audio/music-placeholder",
+    dataUrl: `data:application/json;base64,${Buffer.from(
+      JSON.stringify({ message: "Music generation not yet implemented" })
+    ).toString("base64")}`,
     model: "music-stub",
     duration: params.duration || 30,
+    format: "application/json",
   };
 }

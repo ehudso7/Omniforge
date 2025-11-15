@@ -2,20 +2,23 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, FileText, Image, Music, Video } from "lucide-react";
+import { ArrowLeft, FileText, Image, Music, Video, Sparkles } from "lucide-react";
 import TextTool from "@/components/tools/text-tool";
 import ImageTool from "@/components/tools/image-tool";
 import AudioTool from "@/components/tools/audio-tool";
 import VideoTool from "@/components/tools/video-tool";
+import ProductionTool from "@/components/tools/production-tool";
+
+type AssetType = "TEXT" | "IMAGE" | "AUDIO" | "VIDEO";
 
 interface Asset {
   id: string;
-  type: string;
+  type: AssetType;
   title: string;
   inputPrompt: string;
   outputData: any;
   metadata: any;
-  createdAt: Date;
+  createdAt: string | Date;
 }
 
 interface Project {
@@ -29,12 +32,13 @@ interface ProjectWorkspaceProps {
   project: Project;
 }
 
-type ToolType = "TEXT" | "IMAGE" | "AUDIO" | "VIDEO";
+type ToolType = AssetType | "PRODUCTION";
 
 export default function ProjectWorkspace({ project }: ProjectWorkspaceProps) {
-  const [activeTab, setActiveTab] = useState<ToolType>("TEXT");
+  const [activeTab, setActiveTab] = useState<ToolType>("PRODUCTION");
 
   const tabs = [
+    { type: "PRODUCTION" as ToolType, label: "Production", icon: Sparkles },
     { type: "TEXT" as ToolType, label: "Text", icon: FileText },
     { type: "IMAGE" as ToolType, label: "Image", icon: Image },
     { type: "AUDIO" as ToolType, label: "Audio", icon: Music },
@@ -42,17 +46,19 @@ export default function ProjectWorkspace({ project }: ProjectWorkspaceProps) {
   ];
 
   const renderTool = () => {
-    const assets = project.assets.filter((a) => a.type === activeTab);
+    const filteredAssets = project.assets.filter((a) => a.type === activeTab);
 
     switch (activeTab) {
+      case "PRODUCTION":
+        return <ProductionTool projectId={project.id} assets={project.assets} />;
       case "TEXT":
-        return <TextTool projectId={project.id} assets={assets} />;
+        return <TextTool projectId={project.id} assets={filteredAssets} />;
       case "IMAGE":
-        return <ImageTool projectId={project.id} assets={assets} />;
+        return <ImageTool projectId={project.id} assets={filteredAssets} />;
       case "AUDIO":
-        return <AudioTool projectId={project.id} assets={assets} />;
+        return <AudioTool projectId={project.id} assets={filteredAssets} />;
       case "VIDEO":
-        return <VideoTool projectId={project.id} assets={assets} />;
+        return <VideoTool projectId={project.id} assets={filteredAssets} />;
       default:
         return null;
     }
