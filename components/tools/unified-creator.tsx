@@ -32,6 +32,7 @@ interface GenerationResult {
           description: string;
           dialogue?: string[];
           imageUrl?: string;
+          visualStyle?: string;
         }>;
         narration?: string;
       }>;
