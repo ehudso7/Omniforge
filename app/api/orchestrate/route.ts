@@ -101,6 +101,9 @@ export async function POST(request: Request) {
         ...production,
         assets: savedAssets,
       },
+      message: production.isComplete 
+        ? `Complete ${production.productionType} production created!`
+        : `Production created (${savedAssets.length} assets)`,
     });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
