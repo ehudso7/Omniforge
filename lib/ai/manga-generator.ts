@@ -211,34 +211,61 @@ Return ONLY a valid JSON object with this exact structure (no other text):
       model: "gpt-4o-mini",
     });
 
+    if (!result || !result.content) {
+      throw new Error("Empty response from LLM");
+    }
+
     // Extract JSON from response - try multiple strategies
     let jsonText = result.content.trim();
     
-    // Strategy 1: Find JSON object boundaries
-    const jsonStart = jsonText.indexOf('{');
-    const jsonEnd = jsonText.lastIndexOf('}');
-    
-    if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
-      jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
+    // Check if response starts with error message
+    if (jsonText.toLowerCase().startsWith("an error") || jsonText.toLowerCase().startsWith("error")) {
+      console.warn("LLM returned error message instead of JSON:", jsonText.substring(0, 200));
+      throw new Error("LLM returned error message");
     }
     
-    // Strategy 2: Try to find JSON in code blocks
+    // Strategy 1: Try to find JSON in code blocks first
     const codeBlockMatch = jsonText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-    if (codeBlockMatch) {
-      jsonText = codeBlockMatch[1];
+    if (codeBlockMatch && codeBlockMatch[1]) {
+      jsonText = codeBlockMatch[1].trim();
+    } else {
+      // Strategy 2: Find JSON object boundaries
+      const jsonStart = jsonText.indexOf('{');
+      const jsonEnd = jsonText.lastIndexOf('}');
+      
+      if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+        jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
+      } else {
+        throw new Error("Could not find JSON boundaries");
+      }
     }
     
     // Clean up common issues
-    jsonText = jsonText
-      .replace(/^[^{]*/, '') // Remove anything before first {
-      .replace(/[^}]*$/, '}') // Remove anything after last }
-      .trim();
-
-    if (!jsonText || !jsonText.startsWith('{')) {
-      throw new Error("Could not extract JSON from response");
+    jsonText = jsonText.trim();
+    
+    // Remove any leading text that's not part of JSON
+    if (!jsonText.startsWith('{')) {
+      const firstBrace = jsonText.indexOf('{');
+      if (firstBrace !== -1) {
+        jsonText = jsonText.substring(firstBrace);
+      } else {
+        throw new Error("No JSON object found in response");
+      }
     }
 
-    const parsed = JSON.parse(jsonText);
+    // Validate it looks like JSON
+    if (!jsonText.startsWith('{') || !jsonText.endsWith('}')) {
+      throw new Error("Invalid JSON format");
+    }
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch (parseError) {
+      console.error("JSON parse error:", parseError);
+      console.error("Attempted to parse:", jsonText.substring(0, 500));
+      throw new Error(`JSON parse failed: ${parseError instanceof Error ? parseError.message : "Unknown error"}`);
+    }
     
     // Validate and ensure required fields
     const validated: StoryStructure = {
@@ -265,6 +292,7 @@ Return ONLY a valid JSON object with this exact structure (no other text):
     return validated;
   } catch (error) {
     console.error("Story structure generation error:", error);
+    console.error("Falling back to default structure");
     // Fallback structure
     return createFallbackStoryStructure(prompt, pages, style, title);
   }
@@ -342,49 +370,72 @@ Return ONLY valid JSON (no other text):
         model: "gpt-4o-mini",
       });
 
+      if (!result || !result.content) {
+        throw new Error("Empty response from LLM");
+      }
+
       // Extract JSON from response
       let jsonText = result.content.trim();
       
-      // Find JSON object boundaries
-      const jsonStart = jsonText.indexOf('{');
-      const jsonEnd = jsonText.lastIndexOf('}');
-      
-      if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
-        jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
+      // Check for error messages
+      if (jsonText.toLowerCase().startsWith("an error") || jsonText.toLowerCase().startsWith("error")) {
+        throw new Error("LLM returned error message");
       }
       
-      // Try code block extraction
+      // Try code block extraction first
       const codeBlockMatch = jsonText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-      if (codeBlockMatch) {
-        jsonText = codeBlockMatch[1];
+      if (codeBlockMatch && codeBlockMatch[1]) {
+        jsonText = codeBlockMatch[1].trim();
+      } else {
+        // Find JSON object boundaries
+        const jsonStart = jsonText.indexOf('{');
+        const jsonEnd = jsonText.lastIndexOf('}');
+        
+        if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+          jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
+        } else {
+          throw new Error("Could not find JSON boundaries");
+        }
       }
       
       // Clean up
-      jsonText = jsonText
-        .replace(/^[^{]*/, '')
-        .replace(/[^}]*$/, '}')
-        .trim();
-
-      if (jsonText && jsonText.startsWith('{')) {
-        const parsed = JSON.parse(jsonText);
-        
-        // Ensure panels array exists
-        if (parsed.panels && Array.isArray(parsed.panels)) {
-          pagesData.push({
-            pageNumber: pageBreakdown.pageNumber,
-            panels: parsed.panels.map((p: any, idx: number) => ({
-              panelNumber: p.panelNumber || idx + 1,
-              description: p.description || pageBreakdown.summary,
-              dialogue: Array.isArray(p.dialogue) ? p.dialogue : [],
-              visualStyle: p.visualStyle || "standard",
-            })),
-            narration: parsed.narration || undefined,
-          });
+      jsonText = jsonText.trim();
+      
+      if (!jsonText.startsWith('{')) {
+        const firstBrace = jsonText.indexOf('{');
+        if (firstBrace !== -1) {
+          jsonText = jsonText.substring(firstBrace);
         } else {
-          throw new Error("Invalid panels structure");
+          throw new Error("No JSON object found");
         }
+      }
+
+      if (!jsonText.startsWith('{') || !jsonText.endsWith('}')) {
+        throw new Error("Invalid JSON format");
+      }
+
+      let parsed: any;
+      try {
+        parsed = JSON.parse(jsonText);
+      } catch (parseError) {
+        console.error(`JSON parse error for page ${pageBreakdown.pageNumber}:`, parseError);
+        throw new Error(`JSON parse failed: ${parseError instanceof Error ? parseError.message : "Unknown error"}`);
+      }
+      
+      // Ensure panels array exists
+      if (parsed.panels && Array.isArray(parsed.panels) && parsed.panels.length > 0) {
+        pagesData.push({
+          pageNumber: pageBreakdown.pageNumber,
+          panels: parsed.panels.map((p: any, idx: number) => ({
+            panelNumber: p.panelNumber || idx + 1,
+            description: p.description || pageBreakdown.summary,
+            dialogue: Array.isArray(p.dialogue) ? p.dialogue : [],
+            visualStyle: p.visualStyle || "standard",
+          })),
+          narration: parsed.narration || undefined,
+        });
       } else {
-        throw new Error("Could not extract JSON");
+        throw new Error("Invalid or empty panels structure");
       }
     } catch (error) {
       console.error(`Error generating page ${pageBreakdown.pageNumber}:`, error);

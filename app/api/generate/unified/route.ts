@@ -78,8 +78,17 @@ export async function POST(request: Request) {
       );
     }
     console.error("Unified generation error:", error);
-    return serverError(
-      error instanceof Error ? error.message : "Generation failed"
-    );
+    
+    // Provide more helpful error messages
+    let errorMessage = "Generation failed";
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      // If it's a JSON parsing error, provide a more user-friendly message
+      if (error.message.includes("JSON") || error.message.includes("parse")) {
+        errorMessage = "Failed to process the generated content. Please try again.";
+      }
+    }
+    
+    return serverError(errorMessage);
   }
 }
