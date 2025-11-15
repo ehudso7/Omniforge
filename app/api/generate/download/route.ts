@@ -38,20 +38,26 @@ export async function GET(
     }
 
     // Handle different asset types
+    if (!asset.outputData) {
+      return notFound("Asset data not available");
+    }
+
     switch (asset.type) {
       case "TEXT":
         // Manga downloads
-        if (asset.outputData.compiled) {
-          const compiled = asset.outputData.compiled;
+        if (asset.outputData && typeof asset.outputData === 'object' && 'compiled' in asset.outputData) {
+          const compiled = (asset.outputData as any).compiled;
           
-          if (format === "pdf" && compiled.pdfUrl) {
-            return NextResponse.redirect(compiled.pdfUrl);
-          }
-          if (format === "images" && compiled.imageSequenceUrl) {
-            return NextResponse.redirect(compiled.imageSequenceUrl);
-          }
-          if (format === "webtoon" && compiled.webtoonUrl) {
-            return NextResponse.redirect(compiled.webtoonUrl);
+          if (compiled) {
+            if (format === "pdf" && compiled.pdfUrl) {
+              return NextResponse.redirect(compiled.pdfUrl);
+            }
+            if (format === "images" && compiled.imageSequenceUrl) {
+              return NextResponse.redirect(compiled.imageSequenceUrl);
+            }
+            if (format === "webtoon" && compiled.webtoonUrl) {
+              return NextResponse.redirect(compiled.webtoonUrl);
+            }
           }
         }
         
@@ -64,25 +70,34 @@ export async function GET(
 
       case "AUDIO":
         // Audio file download
-        if (asset.outputData.url) {
-          // In production, fetch the actual audio file and stream it
-          // For now, redirect to the URL
-          return NextResponse.redirect(asset.outputData.url);
+        if (asset.outputData && typeof asset.outputData === 'object' && 'url' in asset.outputData) {
+          const url = (asset.outputData as any).url;
+          if (url) {
+            // In production, fetch the actual audio file and stream it
+            // For now, redirect to the URL
+            return NextResponse.redirect(url);
+          }
         }
         return notFound("Audio file not available");
 
       case "VIDEO":
         // Video file download
-        if (asset.outputData.url) {
-          // In production, fetch the actual video file and stream it
-          return NextResponse.redirect(asset.outputData.url);
+        if (asset.outputData && typeof asset.outputData === 'object' && 'url' in asset.outputData) {
+          const url = (asset.outputData as any).url;
+          if (url) {
+            // In production, fetch the actual video file and stream it
+            return NextResponse.redirect(url);
+          }
         }
         return notFound("Video file not available");
 
       case "IMAGE":
         // Image download
-        if (asset.outputData.url) {
-          return NextResponse.redirect(asset.outputData.url);
+        if (asset.outputData && typeof asset.outputData === 'object' && 'url' in asset.outputData) {
+          const url = (asset.outputData as any).url;
+          if (url) {
+            return NextResponse.redirect(url);
+          }
         }
         return notFound("Image not available");
 
