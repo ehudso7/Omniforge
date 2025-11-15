@@ -6,6 +6,8 @@ import {
   notFound,
   serverError,
 } from "@/lib/auth-helpers";
+import { sanitizePrompt } from "@/lib/validation";
+import { rateLimit, getRateLimitIdentifier } from "@/lib/rate-limit";
 import { z } from "zod";
 
 const createAssetSchema = z.object({
@@ -67,6 +69,16 @@ export async function POST(
     const { projectId } = await params;
     const user = await requireAuth();
 
+    // Rate limiting
+    const identifier = getRateLimitIdentifier(request);
+    const rateLimitResult = rateLimit(`assets:create:${user.id}:${identifier}`);
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        { status: 429 }
+      );
+    }
+
     // Verify project ownership
     const project = await prisma.project.findFirst({
       where: {
@@ -81,6 +93,10 @@ export async function POST(
 
     const body = await request.json();
     const data = createAssetSchema.parse(body);
+
+    // Sanitize input prompt
+    data.inputPrompt = sanitizePrompt(data.inputPrompt);
+    data.title = data.title.slice(0, 200).trim(); // Limit title length
 
     const asset = await prisma.asset.create({
       data: {

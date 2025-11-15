@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireAuth, unauthorized, serverError } from "@/lib/auth-helpers";
 import { generateImage } from "@/lib/ai";
+import { sanitizePrompt } from "@/lib/validation";
+import { rateLimit, getRateLimitIdentifier } from "@/lib/rate-limit";
 import { z } from "zod";
 
 const imageGenerationSchema = z.object({
@@ -13,10 +15,26 @@ const imageGenerationSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    await requireAuth();
+    const user = await requireAuth();
+
+    // Rate limiting (image generation is more expensive)
+    const identifier = getRateLimitIdentifier(request);
+    const rateLimitResult = rateLimit(`generate:image:${user.id}:${identifier}`);
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        { status: 429, headers: { "Retry-After": "60" } }
+      );
+    }
 
     const body = await request.json();
     const params = imageGenerationSchema.parse(body);
+
+    // Sanitize prompt
+    params.prompt = sanitizePrompt(params.prompt);
+    if (params.negativePrompt) {
+      params.negativePrompt = sanitizePrompt(params.negativePrompt);
+    }
 
     const result = await generateImage(params);
     return NextResponse.json({ result });

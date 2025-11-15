@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireAuth, unauthorized, serverError } from "@/lib/auth-helpers";
 import { generateSpeech, generateMusic } from "@/lib/ai";
+import { sanitizePrompt } from "@/lib/validation";
+import { rateLimit, getRateLimitIdentifier } from "@/lib/rate-limit";
 import { z } from "zod";
 
 const audioGenerationSchema = z.object({
@@ -13,10 +15,23 @@ const audioGenerationSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    await requireAuth();
+    const user = await requireAuth();
+
+    // Rate limiting
+    const identifier = getRateLimitIdentifier(request);
+    const rateLimitResult = rateLimit(`generate:audio:${user.id}:${identifier}`);
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        { status: 429, headers: { "Retry-After": "60" } }
+      );
+    }
 
     const body = await request.json();
     const params = audioGenerationSchema.parse(body);
+
+    // Sanitize text input
+    params.text = sanitizePrompt(params.text);
 
     let result;
     if (params.type === "speech") {

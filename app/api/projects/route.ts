@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, unauthorized, serverError } from "@/lib/auth-helpers";
+import { validateProjectName } from "@/lib/validation";
+import { rateLimit, getRateLimitIdentifier } from "@/lib/rate-limit";
 import { z } from "zod";
 
 const createProjectSchema = z.object({
@@ -37,13 +39,27 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const user = await requireAuth();
+
+    // Rate limiting
+    const identifier = getRateLimitIdentifier(request);
+    const rateLimitResult = rateLimit(`projects:create:${user.id}:${identifier}`);
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        { status: 429 }
+      );
+    }
+
     const body = await request.json();
     const { name, description } = createProjectSchema.parse(body);
 
+    // Validate and sanitize project name
+    const validatedName = validateProjectName(name);
+
     const project = await prisma.project.create({
       data: {
-        name,
-        description,
+        name: validatedName,
+        description: description?.slice(0, 500), // Limit description length
         userId: user.id,
       },
     });

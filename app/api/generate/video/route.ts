@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireAuth, unauthorized, serverError } from "@/lib/auth-helpers";
 import { generateStoryboard } from "@/lib/ai";
+import { sanitizePrompt } from "@/lib/validation";
+import { rateLimit, getRateLimitIdentifier } from "@/lib/rate-limit";
 import { z } from "zod";
 
 const videoGenerationSchema = z.object({
@@ -11,10 +13,23 @@ const videoGenerationSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    await requireAuth();
+    const user = await requireAuth();
+
+    // Rate limiting
+    const identifier = getRateLimitIdentifier(request);
+    const rateLimitResult = rateLimit(`generate:video:${user.id}:${identifier}`);
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        { status: 429, headers: { "Retry-After": "60" } }
+      );
+    }
 
     const body = await request.json();
     const params = videoGenerationSchema.parse(body);
+
+    // Sanitize concept input
+    params.concept = sanitizePrompt(params.concept);
 
     const result = await generateStoryboard(params);
     return NextResponse.json({ result });

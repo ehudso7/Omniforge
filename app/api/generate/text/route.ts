@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireAuth, unauthorized, serverError } from "@/lib/auth-helpers";
 import { generateText, streamText } from "@/lib/ai";
+import { sanitizePrompt } from "@/lib/validation";
+import { rateLimit, getRateLimitIdentifier } from "@/lib/rate-limit";
 import { z } from "zod";
 
 const textGenerationSchema = z.object({
@@ -14,10 +16,26 @@ const textGenerationSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    await requireAuth();
+    const user = await requireAuth();
+
+    // Rate limiting
+    const identifier = getRateLimitIdentifier(request);
+    const rateLimitResult = rateLimit(`generate:text:${user.id}:${identifier}`);
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        { status: 429, headers: { "Retry-After": "60" } }
+      );
+    }
 
     const body = await request.json();
     const params = textGenerationSchema.parse(body);
+
+    // Sanitize prompt
+    params.prompt = sanitizePrompt(params.prompt);
+    if (params.systemPrompt) {
+      params.systemPrompt = sanitizePrompt(params.systemPrompt);
+    }
 
     if (params.stream) {
       // Return streaming response

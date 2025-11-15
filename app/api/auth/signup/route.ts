@@ -1,18 +1,33 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/password";
+import { validatePassword, emailSchema } from "@/lib/validation";
 import { z } from "zod";
+import { rateLimit, getRateLimitIdentifier } from "@/lib/rate-limit";
 
 const signupSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-  name: z.string().optional(),
+  email: emailSchema,
+  password: z.string(),
+  name: z.string().max(100).optional(),
 });
 
 export async function POST(request: Request) {
   try {
+    // Rate limiting
+    const identifier = getRateLimitIdentifier(request);
+    const rateLimitResult = rateLimit(`signup:${identifier}`);
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        { status: 429 }
+      );
+    }
+
     const body = await request.json();
     const { email, password, name } = signupSchema.parse(body);
+
+    // Validate password strength
+    validatePassword(password);
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
