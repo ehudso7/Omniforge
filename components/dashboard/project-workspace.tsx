@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, FileText, Image, Music, Video } from "lucide-react";
+import { ArrowLeft, FileText, Image, Music, Video, Sparkles } from "lucide-react";
+import UnifiedCreator from "@/components/tools/unified-creator";
 import TextTool from "@/components/tools/text-tool";
 import ImageTool from "@/components/tools/image-tool";
 import AudioTool from "@/components/tools/audio-tool";
@@ -32,9 +33,10 @@ interface ProjectWorkspaceProps {
 type ToolType = "TEXT" | "IMAGE" | "AUDIO" | "VIDEO";
 
 export default function ProjectWorkspace({ project }: ProjectWorkspaceProps) {
-  const [activeTab, setActiveTab] = useState<ToolType>("TEXT");
+  const [activeTab, setActiveTab] = useState<ToolType | "CREATE">("CREATE");
 
   const tabs = [
+    { type: "CREATE" as const, label: "Create", icon: Sparkles },
     { type: "TEXT" as ToolType, label: "Text", icon: FileText },
     { type: "IMAGE" as ToolType, label: "Image", icon: Image },
     { type: "AUDIO" as ToolType, label: "Audio", icon: Music },
@@ -42,6 +44,10 @@ export default function ProjectWorkspace({ project }: ProjectWorkspaceProps) {
   ];
 
   const renderTool = () => {
+    if (activeTab === "CREATE") {
+      return <UnifiedCreator projectId={project.id} />;
+    }
+
     const assets = project.assets.filter((a) => a.type === activeTab);
 
     switch (activeTab) {
