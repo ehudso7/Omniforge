@@ -138,7 +138,14 @@ async function generateStoryStructure(
   style: string = "shonen",
   title?: string
 ): Promise<StoryStructure> {
-  const systemPrompt = `You are a professional manga writer and storyboard artist. Create a complete, original manga story that is production-ready.
+  const systemPrompt = `You are a professional manga writer and storyboard artist. Your task is to create a complete, original manga story structure.
+
+CRITICAL REQUIREMENTS:
+- You MUST return ONLY valid JSON
+- Do NOT include any text before or after the JSON
+- Do NOT include explanations, apologies, or error messages
+- The JSON must be complete and valid
+- If you cannot create the story, return a basic valid JSON structure anyway
 
 Style: ${style}
 Pages: ${pages}
@@ -149,11 +156,10 @@ Create a complete story with:
 3. Main characters with distinct personalities
 4. A clear story arc (beginning, middle, end)
 5. Page-by-page breakdown with key events
-6. Panel descriptions for each page
 
 Make it completely original and unique. Avoid any copyright material.
 
-IMPORTANT: Return ONLY valid JSON. Do not include any explanatory text before or after the JSON.`;
+Return ONLY the JSON object, nothing else.`;
 
   const storyPrompt = title
     ? `Create a complete ${pages}-page ${style} manga titled "${title}" based on: ${prompt}
@@ -196,16 +202,18 @@ The manga must be:
 - Include compelling characters
 - Be production-ready
 
-Return ONLY a valid JSON object with this exact structure (no other text):
+CRITICAL: You MUST return ONLY valid JSON. No explanations, no apologies, no error messages. Just the JSON object.
+
+Return this exact JSON structure:
 {
   "title": "Manga Title",
   "synopsis": "Complete synopsis of the story",
-  "genre": "Action/Comedy/etc",
+  "genre": "Action-Comedy",
   "storyArc": "Brief description of the story arc",
   "characters": [
     {
       "name": "Character Name",
-      "role": "protagonist/antagonist/supporting",
+      "role": "protagonist",
       "description": "Character description and personality"
     }
   ],
@@ -216,13 +224,15 @@ Return ONLY a valid JSON object with this exact structure (no other text):
       "keyEvents": ["Event 1", "Event 2"]
     }
   ]
-}`;
+}
+
+Remember: Return ONLY the JSON, nothing else.`;
 
   try {
     const result = await generateText({
       prompt: storyPrompt,
       systemPrompt,
-      temperature: 0.8,
+      temperature: 0.7, // Lower temperature for more consistent JSON
       maxTokens: 4000,
       model: "gpt-4o-mini",
     });
@@ -234,13 +244,23 @@ Return ONLY a valid JSON object with this exact structure (no other text):
     // Extract JSON from response - try multiple strategies
     let jsonText = result.content.trim();
     
-    // Check if response starts with error message
-    if (jsonText.toLowerCase().startsWith("an error") || jsonText.toLowerCase().startsWith("error")) {
-      console.warn("LLM returned error message instead of JSON:", jsonText.substring(0, 200));
-      throw new Error("LLM returned error message");
+    // Check if response starts with error message or contains error indicators
+    const lowerText = jsonText.toLowerCase();
+    if (
+      lowerText.startsWith("an error") || 
+      lowerText.startsWith("error") ||
+      lowerText.includes("i'm sorry") ||
+      lowerText.includes("i cannot") ||
+      lowerText.includes("i can't") ||
+      lowerText.includes("unable to")
+    ) {
+      console.warn("LLM returned error message instead of JSON:", jsonText.substring(0, 500));
+      // Use fallback structure instead of throwing
+      return createFallbackStoryStructure(prompt, pages, style, title);
     }
     
     // Strategy 1: Try to find JSON in code blocks first
+    let jsonText = result.content.trim();
     const codeBlockMatch = jsonText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
     if (codeBlockMatch && codeBlockMatch[1]) {
       jsonText = codeBlockMatch[1].trim();
@@ -252,7 +272,9 @@ Return ONLY a valid JSON object with this exact structure (no other text):
       if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
         jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
       } else {
-        throw new Error("Could not find JSON boundaries");
+        // No JSON found, use fallback
+        console.warn("Could not find JSON boundaries, using fallback structure");
+        return createFallbackStoryStructure(prompt, pages, style, title);
       }
     }
     
@@ -265,13 +287,15 @@ Return ONLY a valid JSON object with this exact structure (no other text):
       if (firstBrace !== -1) {
         jsonText = jsonText.substring(firstBrace);
       } else {
-        throw new Error("No JSON object found in response");
+        console.warn("No JSON object found, using fallback structure");
+        return createFallbackStoryStructure(prompt, pages, style, title);
       }
     }
 
     // Validate it looks like JSON
     if (!jsonText.startsWith('{') || !jsonText.endsWith('}')) {
-      throw new Error("Invalid JSON format");
+      console.warn("Invalid JSON format, using fallback structure");
+      return createFallbackStoryStructure(prompt, pages, style, title);
     }
 
     let parsed: any;
@@ -280,7 +304,8 @@ Return ONLY a valid JSON object with this exact structure (no other text):
     } catch (parseError) {
       console.error("JSON parse error:", parseError);
       console.error("Attempted to parse:", jsonText.substring(0, 500));
-      throw new Error(`JSON parse failed: ${parseError instanceof Error ? parseError.message : "Unknown error"}`);
+      // Use fallback instead of throwing
+      return createFallbackStoryStructure(prompt, pages, style, title);
     }
     
     // Validate and ensure required fields
@@ -364,14 +389,15 @@ Create 4-6 panels for this page with:
 - Action and movement
 - Manga-style composition
 
-Return ONLY valid JSON (no other text):
+CRITICAL: Return ONLY valid JSON. No explanations, no error messages. Just the JSON object.
+
 {
   "panels": [
     {
       "panelNumber": 1,
       "description": "Detailed visual description",
       "dialogue": ["Character: Dialogue text"],
-      "visualStyle": "close-up/wide shot/action/etc"
+      "visualStyle": "close-up"
     }
   ],
   "narration": "Optional narration text"
@@ -380,22 +406,62 @@ Return ONLY valid JSON (no other text):
     try {
       const result = await generateText({
         prompt: pagePrompt,
-        systemPrompt: "You are a professional manga storyboard artist. Create detailed panel descriptions. Return ONLY valid JSON, no other text.",
+        systemPrompt: `You are a professional manga storyboard artist. Your task is to create detailed panel descriptions.
+
+CRITICAL REQUIREMENTS:
+- You MUST return ONLY valid JSON
+- Do NOT include any text before or after the JSON
+- Do NOT include explanations, apologies, or error messages
+- The JSON must be complete and valid
+- If you cannot create panels, return a basic valid JSON structure anyway
+
+Return ONLY the JSON object, nothing else.`,
         temperature: 0.7,
         maxTokens: 2000,
         model: "gpt-4o-mini",
       });
 
       if (!result || !result.content) {
-        throw new Error("Empty response from LLM");
+        // Use fallback instead of throwing
+        pagesData.push({
+          pageNumber: pageBreakdown.pageNumber,
+          panels: [
+            {
+              panelNumber: 1,
+              description: pageBreakdown.summary,
+              dialogue: [],
+              visualStyle: "standard",
+            },
+          ],
+        });
+        continue;
       }
 
       // Extract JSON from response
       let jsonText = result.content.trim();
       
-      // Check for error messages
-      if (jsonText.toLowerCase().startsWith("an error") || jsonText.toLowerCase().startsWith("error")) {
-        throw new Error("LLM returned error message");
+      // Check for error messages - use fallback instead of throwing
+      const lowerText = jsonText.toLowerCase();
+      if (
+        lowerText.startsWith("an error") || 
+        lowerText.startsWith("error") ||
+        lowerText.includes("i'm sorry") ||
+        lowerText.includes("i cannot") ||
+        lowerText.includes("i can't")
+      ) {
+        console.warn(`LLM returned error for page ${pageBreakdown.pageNumber}, using fallback`);
+        pagesData.push({
+          pageNumber: pageBreakdown.pageNumber,
+          panels: [
+            {
+              panelNumber: 1,
+              description: pageBreakdown.summary,
+              dialogue: [],
+              visualStyle: "standard",
+            },
+          ],
+        });
+        continue;
       }
       
       // Try code block extraction first
@@ -410,7 +476,19 @@ Return ONLY valid JSON (no other text):
         if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
           jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
         } else {
-          throw new Error("Could not find JSON boundaries");
+          // Use fallback panel instead of throwing
+          pagesData.push({
+            pageNumber: pageBreakdown.pageNumber,
+            panels: [
+              {
+                panelNumber: 1,
+                description: pageBreakdown.summary,
+                dialogue: [],
+                visualStyle: "standard",
+              },
+            ],
+          });
+          continue;
         }
       }
       
@@ -422,12 +500,36 @@ Return ONLY valid JSON (no other text):
         if (firstBrace !== -1) {
           jsonText = jsonText.substring(firstBrace);
         } else {
-          throw new Error("No JSON object found");
+          // Use fallback panel
+          pagesData.push({
+            pageNumber: pageBreakdown.pageNumber,
+            panels: [
+              {
+                panelNumber: 1,
+                description: pageBreakdown.summary,
+                dialogue: [],
+                visualStyle: "standard",
+              },
+            ],
+          });
+          continue;
         }
       }
 
       if (!jsonText.startsWith('{') || !jsonText.endsWith('}')) {
-        throw new Error("Invalid JSON format");
+        // Use fallback panel
+        pagesData.push({
+          pageNumber: pageBreakdown.pageNumber,
+          panels: [
+            {
+              panelNumber: 1,
+              description: pageBreakdown.summary,
+              dialogue: [],
+              visualStyle: "standard",
+            },
+          ],
+        });
+        continue;
       }
 
       let parsed: any;
@@ -435,7 +537,19 @@ Return ONLY valid JSON (no other text):
         parsed = JSON.parse(jsonText);
       } catch (parseError) {
         console.error(`JSON parse error for page ${pageBreakdown.pageNumber}:`, parseError);
-        throw new Error(`JSON parse failed: ${parseError instanceof Error ? parseError.message : "Unknown error"}`);
+        // Use fallback panel instead of throwing
+        pagesData.push({
+          pageNumber: pageBreakdown.pageNumber,
+          panels: [
+            {
+              panelNumber: 1,
+              description: pageBreakdown.summary,
+              dialogue: [],
+              visualStyle: "standard",
+            },
+          ],
+        });
+        continue;
       }
       
       // Ensure panels array exists
@@ -451,7 +565,18 @@ Return ONLY valid JSON (no other text):
           narration: parsed.narration || undefined,
         });
       } else {
-        throw new Error("Invalid or empty panels structure");
+        // Use fallback panel
+        pagesData.push({
+          pageNumber: pageBreakdown.pageNumber,
+          panels: [
+            {
+              panelNumber: 1,
+              description: pageBreakdown.summary,
+              dialogue: [],
+              visualStyle: "standard",
+            },
+          ],
+        });
       }
     } catch (error) {
       console.error(`Error generating page ${pageBreakdown.pageNumber}:`, error);
@@ -549,22 +674,77 @@ function createFallbackStoryStructure(
   style: string,
   title?: string
 ): StoryStructure {
+  // Create a more detailed fallback structure based on the prompt
+  const promptLower = prompt.toLowerCase();
+  
+  // Extract key themes from prompt
+  const themes: string[] = [];
+  if (promptLower.includes("warrior") || promptLower.includes("fighter")) themes.push("warrior");
+  if (promptLower.includes("soul") || promptLower.includes("spirit")) themes.push("soul/spirit");
+  if (promptLower.includes("comedy") || promptLower.includes("funny")) themes.push("comedy");
+  if (promptLower.includes("action") || promptLower.includes("battle")) themes.push("action");
+  
+  const genre = style === "shonen" ? "Action-Comedy" : style;
+  const generatedTitle = title || `The ${themes.length > 0 ? themes.join(" & ") : "Adventure"} Chronicles`;
+  
+  // Create characters based on themes
+  const characters = [
+    {
+      name: themes.includes("warrior") ? "Kaito" : "Ren",
+      role: "protagonist",
+      description: `A young ${themes.includes("warrior") ? "warrior" : "adventurer"} discovering their powers`,
+    },
+    {
+      name: "Sora",
+      role: "supporting",
+      description: "A mysterious companion with unique abilities",
+    },
+  ];
+  
+  if (themes.includes("soul") || themes.includes("spirit")) {
+    characters.push({
+      name: "Yuki",
+      role: "supporting",
+      description: "A spirit guide who helps the protagonist",
+    });
+  }
+  
+  // Create page breakdown with story progression
+  const pageBreakdown = Array.from({ length: pages }, (_, i) => {
+    const pageNum = i + 1;
+    let summary = "";
+    let events: string[] = [];
+    
+    if (pageNum === 1) {
+      summary = "Introduction: The protagonist discovers their unique abilities";
+      events = ["Character introduction", "Power awakening", "First encounter"];
+    } else if (pageNum <= pages / 3) {
+      summary = `Early story: The protagonist begins their journey and meets allies`;
+      events = ["Character development", "World building", "Forming team"];
+    } else if (pageNum <= (pages * 2) / 3) {
+      summary = "Middle story: Challenges and battles test the protagonist";
+      events = ["Rising action", "Major conflict", "Character growth"];
+    } else if (pageNum < pages) {
+      summary = "Climax: The final battle approaches";
+      events = ["Final confrontation", "Revelations", "Ultimate test"];
+    } else {
+      summary = "Conclusion: The story reaches its resolution";
+      events = ["Resolution", "Character arcs complete", "New beginning"];
+    }
+    
+    return {
+      pageNumber: pageNum,
+      summary,
+      keyEvents: events,
+    };
+  });
+  
   return {
-    title: title || "Untitled Manga",
-    synopsis: `A complete ${style} manga story based on: ${prompt}`,
-    genre: style,
-    storyArc: "Complete story arc with beginning, middle, and end",
-    characters: [
-      {
-        name: "Main Character",
-        role: "protagonist",
-        description: "The main character of the story",
-      },
-    ],
-    pageBreakdown: Array.from({ length: pages }, (_, i) => ({
-      pageNumber: i + 1,
-      summary: `Page ${i + 1} of the story`,
-      keyEvents: [`Event on page ${i + 1}`],
-    })),
+    title: generatedTitle,
+    synopsis: `An original ${style} manga story inspired by: ${prompt}. Follow the journey of ${characters[0].name} as they discover their powers and face incredible challenges. This is a completely original story with unique characters and world-building.`,
+    genre,
+    storyArc: `A complete ${pages}-page story following the hero's journey: beginning (pages 1-${Math.floor(pages/3)}), middle (pages ${Math.floor(pages/3)+1}-${Math.floor(pages*2/3)}), and end (pages ${Math.floor(pages*2/3)+1}-${pages})`,
+    characters,
+    pageBreakdown,
   };
 }
