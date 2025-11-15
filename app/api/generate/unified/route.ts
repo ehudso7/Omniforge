@@ -3,6 +3,7 @@ import { requireAuth, unauthorized, serverError } from "@/lib/auth-helpers";
 import { generateUnified, UnifiedGenerationParams } from "@/lib/ai/unified-generator";
 import { sanitizePrompt } from "@/lib/validation";
 import { rateLimit, getRateLimitIdentifier } from "@/lib/rate-limit";
+import { createProgressTracker } from "@/lib/progress-tracker";
 import { z } from "zod";
 
 const unifiedGenerationSchema = z.object({
@@ -63,10 +64,14 @@ export async function POST(request: Request) {
     // Sanitize prompt
     params.prompt = sanitizePrompt(params.prompt);
 
-    // Generate unified content
-    const result = await generateUnified(params as UnifiedGenerationParams);
+    // Get or create generation ID for progress tracking
+    const generationId = request.headers.get("X-Generation-ID") || `gen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const progressTracker = createProgressTracker(generationId, "Starting generation...");
 
-    return NextResponse.json({ result });
+    // Generate unified content with progress tracking
+    const result = await generateUnified(params as UnifiedGenerationParams, progressTracker);
+
+    return NextResponse.json({ result, generationId });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorized();

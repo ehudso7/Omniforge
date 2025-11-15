@@ -8,6 +8,8 @@ import { generateImage } from "./image-client";
 import { generateSpeech, generateMusic } from "./audio-client";
 import { generateStoryboard, generateVideo } from "./video-client";
 import { generateManga, MangaResult } from "./manga-generator";
+import { compileManga } from "../manga-compiler";
+import { ProgressTracker } from "../progress-tracker";
 import { env } from "@/lib/env";
 
 export type ContentType = "text" | "image" | "audio" | "video" | "manga" | "auto";
@@ -16,6 +18,7 @@ export interface UnifiedGenerationParams {
   prompt: string;
   contentType?: ContentType; // If "auto", we detect the intent
   title?: string;
+  progressTracker?: ProgressTracker; // Optional progress tracker
   // Content-specific options
   textOptions?: {
     style?: "article" | "story" | "script" | "poem" | "marketing";
@@ -293,12 +296,14 @@ async function generateProductionAudio(
  */
 async function generateProductionVideo(
   prompt: string,
-  options?: UnifiedGenerationParams["videoOptions"]
+  options?: UnifiedGenerationParams["videoOptions"],
+  progressTracker?: ProgressTracker
 ): Promise<UnifiedGenerationResult["output"]["video"]> {
   const style = options?.style || "cinematic";
   const duration = options?.duration || 60; // 1 minute default
 
   // Generate storyboard first
+  if (progressTracker) progressTracker.update("Storyboard", 20, "Creating video storyboard...");
   const storyboard = await generateStoryboard({
     concept: prompt,
     numberOfFrames: Math.ceil(duration / 5), // One frame per 5 seconds
@@ -306,11 +311,12 @@ async function generateProductionVideo(
   });
 
   // Generate complete video from storyboard
+  if (progressTracker) progressTracker.update("Frames", 40, "Generating video frames...");
   const videoResult = await generateVideo({
     storyboard,
     style,
     concept: prompt,
-  });
+  }, progressTracker);
 
   return {
     url: videoResult.url,
@@ -324,11 +330,18 @@ async function generateProductionVideo(
  * Main unified generation function - Suno-style single prompt to production output
  */
 export async function generateUnified(
-  params: UnifiedGenerationParams
+  params: UnifiedGenerationParams,
+  progressTracker?: ProgressTracker
 ): Promise<UnifiedGenerationResult> {
   const startTime = Date.now();
   const contentType = params.contentType || detectContentType(params.prompt);
   const title = params.title || `Generated ${contentType}`;
+  
+  const tracker = progressTracker || params.progressTracker;
+  
+  if (tracker) {
+    tracker.update("Initializing", 5, `Preparing to generate ${contentType}...`);
+  }
 
   let output: UnifiedGenerationResult["output"] = {};
   let model = "unified";
@@ -337,50 +350,74 @@ export async function generateUnified(
   try {
     switch (contentType) {
       case "text":
+        if (tracker) tracker.update("Generating text", 30, "Writing content...");
         const textOutput = await generateProductionText(
           params.prompt,
           params.textOptions
         );
         output.text = textOutput;
         model = "gpt-4o-mini";
+        if (tracker) tracker.update("Complete", 100, "Text generation complete!");
         break;
 
       case "image":
+        if (tracker) tracker.update("Generating image", 50, "Creating image...");
         const imageOutput = await generateProductionImage(
           params.prompt,
           params.imageOptions
         );
         output.image = imageOutput;
         model = "dall-e-3";
+        if (tracker) tracker.update("Complete", 100, "Image generation complete!");
         break;
 
       case "audio":
+        if (tracker) tracker.update("Generating audio", 20, "Creating complete song...");
         const audioOutput = await generateProductionAudio(
           params.prompt,
           params.audioOptions
         );
+        if (tracker) tracker.update("Mixing audio", 80, "Finalizing production...");
         output.audio = audioOutput;
-        model = "music-generation"; // Would be actual model name
+        model = "music-generation-complete";
+        if (tracker) tracker.update("Complete", 100, "Song generation complete!");
         break;
 
       case "video":
+        if (tracker) tracker.update("Generating video", 10, "Creating storyboard...");
         const videoOutput = await generateProductionVideo(
           params.prompt,
-          params.videoOptions
+          params.videoOptions,
+          tracker
         );
         output.video = videoOutput;
-        model = "video-generation"; // Would be actual model name
+        model = "video-generation-complete";
+        if (tracker) tracker.update("Complete", 100, "Video generation complete!");
         break;
 
       case "manga":
+        if (tracker) tracker.update("Generating story", 10, "Creating manga story structure...");
         const mangaOutput = await generateManga({
           prompt: params.prompt,
           title: params.title,
           pages: params.mangaOptions?.pages || 10,
           style: params.mangaOptions?.style || "shonen",
-        });
+        }, tracker);
+        
+        // Compile manga into production-ready formats (PDF, images, webtoon)
+        if (tracker) tracker.update("Compiling", 90, "Creating downloadable formats...");
+        try {
+          const compiled = await compileManga(mangaOutput, "all");
+          // Add compiled URLs to manga output
+          mangaOutput.compiled = compiled;
+        } catch (error) {
+          console.error("Error compiling manga:", error);
+          // Continue without compiled formats
+        }
+        
         output.manga = mangaOutput;
-        model = "manga-generation";
+        model = "manga-generation-complete";
+        if (tracker) tracker.update("Complete", 100, "Manga generation complete!");
         break;
 
       case "auto":

@@ -44,10 +44,17 @@ export interface MangaResult {
   pages: MangaPage[];
   totalPanels: number;
   storyArc: string;
+  compiled?: {
+    pdfUrl?: string;
+    imageSequenceUrl?: string;
+    webtoonUrl?: string;
+    format: "pdf" | "images" | "webtoon" | "all";
+  };
   metadata: {
     generationTime: number;
     pagesGenerated: number;
     panelsGenerated: number;
+    imagesGenerated: number;
   };
 }
 
@@ -55,28 +62,36 @@ export interface MangaResult {
  * Generate complete production-ready manga
  */
 export async function generateManga(
-  params: MangaGenerationParams
+  params: MangaGenerationParams,
+  progressTracker?: any
 ): Promise<MangaResult> {
   const startTime = Date.now();
   const { prompt, title, pages = 10, style = "shonen" } = params;
 
   // Step 1: Generate complete story structure
+  if (progressTracker) progressTracker.update("Story", 10, "Creating story structure...");
   const storyStructure = await generateStoryStructure(prompt, pages, style, title);
 
   // Step 2: Generate character designs
+  if (progressTracker) progressTracker.update("Characters", 20, "Designing characters...");
   const characters = await generateCharacters(storyStructure.characters, style);
 
   // Step 3: Generate detailed page breakdowns with panels
+  if (progressTracker) progressTracker.update("Pages", 30, "Creating page layouts...");
   const pagesData = await generatePages(storyStructure, pages, style);
 
-  // Step 4: Generate images for each panel
-  // Note: In production, you'd generate all panel images
-  // For now, we'll generate key panels (first page, key moments)
-  const pagesWithImages = await generatePanelImages(pagesData, characters, style);
+  // Step 4: Generate images for ALL panels - Complete production-ready manga
+  // This generates every single panel image to match Suno's complete output approach
+  if (progressTracker) progressTracker.update("Images", 40, "Generating panel images...");
+  const pagesWithImages = await generatePanelImages(pagesData, characters, style, progressTracker);
 
   const generationTime = (Date.now() - startTime) / 1000;
   const totalPanels = pagesWithImages.reduce(
     (sum, page) => sum + page.panels.length,
+    0
+  );
+  const imagesGenerated = pagesWithImages.reduce(
+    (sum, page) => sum + page.panels.filter(p => p.imageUrl).length,
     0
   );
 
@@ -92,6 +107,7 @@ export async function generateManga(
       generationTime,
       pagesGenerated: pages,
       panelsGenerated: totalPanels,
+      imagesGenerated,
     },
   };
 }
@@ -458,25 +474,31 @@ Return ONLY valid JSON (no other text):
 }
 
 /**
- * Generate images for panels
- * In production, this would generate all panels
- * For now, we generate key panels (first page + key moments)
+ * Generate images for ALL panels - Complete production-ready manga
+ * Generates every single panel image to match Suno's complete output approach
  */
 async function generatePanelImages(
   pages: MangaPage[],
   characters: MangaCharacter[],
-  style: string
+  style: string,
+  progressTracker?: any
 ): Promise<MangaPage[]> {
   const pagesWithImages = [...pages];
+  const totalPanels = pages.reduce((sum, page) => sum + page.panels.length, 0);
+  let generatedCount = 0;
 
-  // Generate images for first page panels (as example)
-  if (pagesWithImages.length > 0) {
-    const firstPage = pagesWithImages[0];
-    for (let i = 0; i < Math.min(firstPage.panels.length, 2); i++) {
-      const panel = firstPage.panels[i];
-      const imagePrompt = `Manga panel, ${style} style: ${panel.description}. Professional manga art, black and white, dynamic composition, original artwork, avoid copyright`;
+  console.log(`Generating images for ${totalPanels} panels...`);
+
+  // Generate images for ALL panels
+  for (const page of pagesWithImages) {
+    for (const panel of page.panels) {
+      // Skip if already has image
+      if (panel.imageUrl) continue;
+
+      const imagePrompt = `Manga panel ${panel.panelNumber}, ${style} style: ${panel.description}. Professional manga art, black and white, dynamic composition, original artwork, avoid copyright, consistent art style`;
 
       try {
+        // Generate image for this panel
         const imageResult = await generateImage({
           prompt: imagePrompt,
           width: 1024,
@@ -485,14 +507,35 @@ async function generatePanelImages(
         });
 
         panel.imageUrl = imageResult.url;
+        generatedCount++;
+
+        // Update progress tracker
+        if (progressTracker) {
+          const progress = 40 + Math.floor((generatedCount / totalPanels) * 50); // 40-90% range
+          progressTracker.update(
+            "Images",
+            progress,
+            `Generated ${generatedCount}/${totalPanels} panel images...`
+          );
+        }
+
+        // Log progress every 5 panels
+        if (generatedCount % 5 === 0) {
+          console.log(`Generated ${generatedCount}/${totalPanels} panel images...`);
+        }
+
+        // Small delay to avoid rate limits (adjust based on API limits)
+        if (generatedCount < totalPanels) {
+          await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
+        }
       } catch (error) {
-        console.error(`Error generating panel image:`, error);
+        console.error(`Error generating panel ${panel.panelNumber} image:`, error);
+        // Continue with other panels even if one fails
       }
     }
   }
 
-  // In production, generate images for all panels
-  // This would be done in batches to avoid rate limits
+  console.log(`Completed: Generated ${generatedCount}/${totalPanels} panel images`);
 
   return pagesWithImages;
 }

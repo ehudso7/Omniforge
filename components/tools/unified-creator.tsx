@@ -38,7 +38,13 @@ interface GenerationResult {
       }>;
       totalPanels: number;
       storyArc: string;
-      metadata: { pagesGenerated: number; panelsGenerated: number };
+      compiled?: {
+        pdfUrl?: string;
+        imageSequenceUrl?: string;
+        webtoonUrl?: string;
+        format: string;
+      };
+      metadata: { pagesGenerated: number; panelsGenerated: number; imagesGenerated: number };
     };
   };
   metadata: {
@@ -54,6 +60,7 @@ export default function UnifiedCreator({ projectId }: UnifiedCreatorProps) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<GenerationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ stage: string; progress: number; message: string } | null>(null);
 
   const generate = async () => {
     if (!prompt.trim()) return;
@@ -61,16 +68,40 @@ export default function UnifiedCreator({ projectId }: UnifiedCreatorProps) {
     setLoading(true);
     setResult(null);
     setError(null);
+    setProgress({ stage: "Starting generation...", progress: 0, message: "Initializing..." });
 
     try {
+      const generationId = `gen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Start progress polling for long operations
+      const progressInterval = setInterval(async () => {
+        try {
+          const progressRes = await fetch(`/api/generate/progress/${generationId}`);
+          if (progressRes.ok) {
+            const { progress: progressData } = await progressRes.json();
+            if (progressData) {
+              setProgress(progressData);
+            }
+          }
+        } catch (err) {
+          // Ignore progress errors
+        }
+      }, 1000);
+
       const response = await fetch("/api/generate/unified", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "X-Generation-ID": generationId,
+        },
         body: JSON.stringify({
           prompt: prompt.trim(),
           contentType: contentType === "auto" ? undefined : contentType,
         }),
       });
+
+      clearInterval(progressInterval);
+      setProgress(null);
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -85,8 +116,10 @@ export default function UnifiedCreator({ projectId }: UnifiedCreatorProps) {
     } catch (err) {
       console.error("Generation error:", err);
       setError(err instanceof Error ? err.message : "Failed to generate content");
+      setProgress(null);
     } finally {
       setLoading(false);
+      setProgress(null);
     }
   };
 
@@ -216,6 +249,23 @@ export default function UnifiedCreator({ projectId }: UnifiedCreatorProps) {
           />
         </div>
 
+        {/* Progress Indicator */}
+        {progress && (
+          <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium">{progress.stage}</span>
+              <span className="text-sm text-gray-500">{Math.round(progress.progress)}%</span>
+            </div>
+            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+              <div
+                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${progress.progress}%` }}
+              />
+            </div>
+            <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">{progress.message}</p>
+          </div>
+        )}
+
         {/* Generate Button */}
         <button
           onClick={generate}
@@ -225,7 +275,7 @@ export default function UnifiedCreator({ projectId }: UnifiedCreatorProps) {
           {loading ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
-              Creating...
+              {progress ? progress.stage : "Creating..."}
             </>
           ) : (
             <>
@@ -326,13 +376,21 @@ export default function UnifiedCreator({ projectId }: UnifiedCreatorProps) {
                   <button className="p-3 bg-blue-600 text-white rounded-full hover:bg-blue-700">
                     <Play className="w-6 h-6" />
                   </button>
-                  <div>
+                  <div className="flex-1">
                     <p className="font-semibold">{result.title}</p>
                     <p className="text-sm text-gray-500">
                       {Math.floor(result.output.audio.duration / 60)}:
                       {(result.output.audio.duration % 60).toString().padStart(2, "0")}
                     </p>
                   </div>
+                  <a
+                    href={result.output.audio.url}
+                    download
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm flex items-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download MP3
+                  </a>
                 </div>
                 {result.output.audio.lyrics && (
                   <div className="mt-4 p-4 bg-white dark:bg-gray-900 rounded-lg">
@@ -348,10 +406,33 @@ export default function UnifiedCreator({ projectId }: UnifiedCreatorProps) {
           {result.output.video && (
             <div className="space-y-4">
               <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                <p className="text-sm text-gray-500 mb-2">
-                  Duration: {Math.floor(result.output.video.duration / 60)}:
-                  {(result.output.video.duration % 60).toString().padStart(2, "0")}
-                </p>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="font-semibold">{result.title}</p>
+                    <p className="text-sm text-gray-500">
+                      Duration: {Math.floor(result.output.video.duration / 60)}:
+                      {(result.output.video.duration % 60).toString().padStart(2, "0")}
+                    </p>
+                  </div>
+                  <a
+                    href={result.output.video.url}
+                    download
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm flex items-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download MP4
+                  </a>
+                </div>
+                {result.output.video.thumbnail && (
+                  <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 mb-4">
+                    <Image
+                      src={result.output.video.thumbnail}
+                      alt="Video thumbnail"
+                      fill
+                      className="object-cover"
+                    />
+                  </div>
+                )}
                 {result.output.video.script && (
                   <div className="mt-4">
                     <h3 className="font-semibold mb-2">Script</h3>
@@ -373,8 +454,45 @@ export default function UnifiedCreator({ projectId }: UnifiedCreatorProps) {
                 </p>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                   <span className="font-semibold">Pages:</span> {result.output.manga.metadata.pagesGenerated} • 
-                  <span className="font-semibold"> Panels:</span> {result.output.manga.metadata.panelsGenerated}
+                  <span className="font-semibold"> Panels:</span> {result.output.manga.metadata.panelsGenerated} • 
+                  <span className="font-semibold"> Images:</span> {result.output.manga.metadata.imagesGenerated}
                 </p>
+                
+                {/* Download Options */}
+                {result.output.manga.compiled && (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {result.output.manga.compiled.pdfUrl && (
+                      <a
+                        href={result.output.manga.compiled.pdfUrl}
+                        download
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                      >
+                        <Download className="w-4 h-4 inline mr-2" />
+                        Download PDF
+                      </a>
+                    )}
+                    {result.output.manga.compiled.imageSequenceUrl && (
+                      <a
+                        href={result.output.manga.compiled.imageSequenceUrl}
+                        download
+                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+                      >
+                        <Download className="w-4 h-4 inline mr-2" />
+                        Download Images
+                      </a>
+                    )}
+                    {result.output.manga.compiled.webtoonUrl && (
+                      <a
+                        href={result.output.manga.compiled.webtoonUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                      >
+                        View Webtoon
+                      </a>
+                    )}
+                  </div>
+                )}
                 <div className="mt-4">
                   <h3 className="font-semibold mb-2">Synopsis</h3>
                   <p className="text-sm whitespace-pre-wrap">{result.output.manga.synopsis}</p>
