@@ -65,7 +65,7 @@ export async function POST(request: Request) {
     params.prompt = sanitizePrompt(params.prompt);
 
     // Get or create generation ID for progress tracking
-    const generationId = request.headers.get("X-Generation-ID") || `gen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const generationId = request.headers.get("X-Generation-ID") || `gen_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     const progressTracker = createProgressTracker(generationId, "Starting generation...");
 
     // Generate unified content with progress tracking

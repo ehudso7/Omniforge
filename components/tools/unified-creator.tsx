@@ -71,7 +71,7 @@ export default function UnifiedCreator({ projectId }: UnifiedCreatorProps) {
     setProgress({ stage: "Starting generation...", progress: 0, message: "Initializing..." });
 
     try {
-      const generationId = `gen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const generationId = `gen_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
       
       // Start progress polling for long operations
       const progressInterval = setInterval(async () => {
