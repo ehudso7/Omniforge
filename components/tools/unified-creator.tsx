@@ -166,7 +166,7 @@ export default function UnifiedCreator({ projectId }: UnifiedCreatorProps) {
           </div>
           <h1 className="text-3xl font-bold mb-2">Create with AI</h1>
           <p className="text-gray-600 dark:text-gray-400">
-            Describe what you want to create. We'll generate production-ready content instantly.
+            Describe what you want to create. We&apos;ll generate production-ready content instantly.
           </p>
         </div>
 
@@ -200,16 +200,16 @@ export default function UnifiedCreator({ projectId }: UnifiedCreatorProps) {
             className="input min-h-[120px] text-lg"
             placeholder={
               contentType === "auto"
-                ? "e.g., 'A catchy pop song about summer nights' or 'A professional article about AI'..."
+                ? "e.g., &apos;A catchy pop song about summer nights&apos; or &apos;A professional article about AI&apos;..."
                 : contentType === "text"
-                ? "e.g., 'Write an engaging article about sustainable technology'..."
+                ? "e.g., &apos;Write an engaging article about sustainable technology&apos;..."
                 : contentType === "image"
-                ? "e.g., 'A futuristic cityscape at sunset, cyberpunk style'..."
+                ? "e.g., &apos;A futuristic cityscape at sunset, cyberpunk style&apos;..."
                 : contentType === "audio"
-                ? "e.g., 'An upbeat pop song about adventure and freedom'..."
+                ? "e.g., &apos;An upbeat pop song about adventure and freedom&apos;..."
                 : contentType === "manga"
-                ? "e.g., 'A shonen manga about a young warrior discovering their powers'..."
-                : "e.g., 'A cinematic video about space exploration'..."
+                ? "e.g., &apos;A shonen manga about a young warrior discovering their powers&apos;..."
+                : "e.g., &apos;A cinematic video about space exploration&apos;..."
             }
             rows={5}
           />
