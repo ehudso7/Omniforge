@@ -21,7 +21,7 @@ export default async function DashboardPage() {
     redirect("/auth/signin");
   }
 
-  let projects = [];
+  let projects: any[] = [];
 
   try {
     projects = await prisma.project.findMany({
